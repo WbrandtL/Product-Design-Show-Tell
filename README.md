@@ -41,9 +41,11 @@ To type-check and build a production bundle without running it:
 npm run build
 ```
 
-`npm run dist` (electron-builder) is wired up in `package.json` for a packaged
-`.dmg`/NSIS installer, but packaging was not exercised in this build session — only
-`npm run dev` was verified end-to-end.
+Run `npm run dist` to build a packaged, double-clickable app (a `.dmg` on macOS via
+electron-builder, NSIS on Windows) — verified working: it produces a real `TimeAware.app`
+that launches, tracks, and shares the same database as the dev build. It isn't code-signed
+(no Apple Developer ID), so macOS Gatekeeper will block the first launch — right-click →
+**Open** once to get past that.
 
 ## Setup — browser extension
 
@@ -69,6 +71,34 @@ extension points" below).
 During development, `npm run watch` in `browser-extension/` rebuilds on file change; you
 still need to click the refresh icon on `chrome://extensions` for the service worker to
 pick up the new build.
+
+## The UI: three always-shown pillars, plus everything else
+
+The Trends page (`desktop-app/src/renderer/src/pages/Trends.tsx`) always shows three
+hero cards, in this order:
+
+- **Productivity** and **Entertainment** — real categories, resolved the normal way
+  (`category_rules`). "Productivity" is what earlier default rules called "Deep Work";
+  it was renamed so it matches a goal you name "Productivity" without extra setup.
+- **Outside** — not a category at all. It's a location-derived pseudo-category: hours
+  spent on any Wi-Fi network *other* than the one you've labeled exactly `"Home"` in
+  Settings (see `OUTSIDE_PSEUDO_CATEGORY`/`HOME_LOCATION_LABEL` in
+  `desktop-app/src/shared/constants.ts`, and the special-casing in
+  `getGoalProgress`/`getWeekOverWeekDelta` in `aggregation/trends.ts`). You can still set
+  a goal on it — goals work by category *name*, and nothing stops "Outside" from having one.
+
+Every other category you have data for (Communication, Social Media, System, Browsing,
+anything auto-categorized or user-added) doesn't get its own hero card, but isn't hidden
+either — it's in the "Every category, week over week" list below the hero cards, and
+clicking any row (there or on a hero card's "Activity Details") opens the same per-app/
+domain drilldown, with **real** activation counts (contiguous runs in the raw event
+stream — see `getActivityBreakdown` in `trends.ts`) and duration, never fabricated numbers.
+
+The whole renderer is Tailwind CSS v4 + `lucide-react` icons (no component library,
+no Recharts — the trend charts are hand-drawn SVG in `components/TrendLineChart.tsx`).
+The window itself is frameless (`frame: false` in `windowManager.ts`); the traffic-light
+dots in the custom header are real, wired to `hideWindow`/`minimizeWindow`/
+`toggleFullScreenWindow` IPC calls, not native OS chrome.
 
 ## How tracking works, and what's stored where
 
@@ -122,7 +152,7 @@ The first time the tracking daemon or the browser extension sees a given app nam
 domain, `autoCategorizeIfNew()` (`desktop-app/src/main/db/categoryRulesRepo.ts`) runs a
 small **keyword heuristic** (`guessCategory()` in `aggregation/categorize.ts`) against it —
 plain case-insensitive substring matching against a static, fully-readable keyword table
-(e.g. "slack"/"zoom"/"teams" → Communication, "code"/"terminal"/"figma" → Deep Work,
+(e.g. "slack"/"zoom"/"teams" → Communication, "code"/"terminal"/"figma" → Productivity,
 "spotify"/"netflix" → Entertainment). If it matches, a real row is written to
 `category_rules` immediately, marked `auto_suggested`. **No network call, no ML model** —
 every guess traces back to one keyword in that table, consistent with the rest of the app
@@ -152,7 +182,7 @@ was already tried, so it's never re-guessed just because the app was used again.
   just change the rule and the trend chart reflects it on next refresh.
 - **Goal category names must match a rule's category exactly** (case-sensitive) — a goal
   for "Productivity" does nothing useful unless some rule actually produces the category
-  "Productivity" (the shipped defaults and heuristic use "Deep Work" instead).
+  "Productivity" — this now matches the shipped defaults, so it works out of the box; it did not always (see the note on the "Outside" pseudo-category below for the other reserved name).
 
 ## Future extension points (explicitly out of scope for v1)
 

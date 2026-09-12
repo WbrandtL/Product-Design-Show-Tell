@@ -2,14 +2,18 @@
 
 ## Stack choice
 
-**Electron + React + TypeScript + Vite (via `electron-vite`), with `better-sqlite3` for storage.**
+**Electron + React + TypeScript + Vite (via `electron-vite`), with `better-sqlite3` for
+storage, Tailwind CSS v4 + `lucide-react` for the UI, and hand-drawn SVG for charts (no
+charting library).**
 
 One-line reason: Electron has the most mature, best-documented path to the three things
 this app actually needs — a tray/menu-bar app, a synchronous local SQLite connection in
 a long-lived Node process, and a local HTTP server for the browser extension — with the
 lowest integration risk to get all of it working reliably in a single session. Tauri
 would mean writing the tracking daemon and SQLite layer in Rust, which is more work for
-no functional benefit here.
+no functional benefit here. Tailwind + hand-drawn SVG charts (vs. Recharts, used in an
+earlier iteration) keeps the whole renderer to one styling system and no chart-library
+dependency, matching a provided design that used the same approach.
 
 ## Extension-communication choice
 
@@ -92,7 +96,7 @@ single-user, single-machine tool.
 | Data layer | `desktop-app/src/main/db/` | Schema, migrations-on-boot, typed repos (raw events, category rules, SSID labels, goals) | `better-sqlite3` only |
 | Aggregation logic | `desktop-app/src/main/aggregation/` | Turns raw events into category/location trends, week-over-week deltas, goal progress | `db/*Repo` (read-only) |
 | IPC layer | `desktop-app/src/main/ipcHandlers.ts`, `preload/` | The only bridge between main-process data/logic and the renderer | `aggregation/`, `db/` |
-| UI | `desktop-app/src/renderer/` | Dashboard + settings screens, chart rendering | `window.timeaware.*` only, via `hooks.ts` |
+| UI | `desktop-app/src/renderer/` | Trends (three hero categories + full breakdown + drilldown) and Settings screens, chart rendering | `window.timeaware.*` only, via `hooks.ts` |
 | Browser extension | `browser-extension/` | Tracks focused-tab domain time, POSTs to the local ingest server | Nothing in `desktop-app/` — communicates only over HTTP |
 
 Each module only talks to the next one through the interfaces above — the tracking daemon
@@ -116,16 +120,25 @@ desktop daemon still records it as e.g. `app_name = "Google Chrome"`. If the bro
 extension is installed and also reported a domain for that same one-minute window, the
 aggregation layer (`getAppMsByDate` in `trends.ts`) excludes that desktop-level row from
 category totals — the more specific domain-level row (with its own category, e.g.
-`github.com` → "Deep Work") is used instead. If the extension isn't installed, or the tab
+`github.com` → "Productivity") is used instead. If the extension isn't installed, or the tab
 was idle, the generic app-level "Chrome" time is used, uncategorized by default. This is
 why the extension is optional: the app degrades gracefully to app-level-only tracking
 without it.
+
+## The "Outside" pseudo-category
+
+`getGoalProgress` and `getWeekOverWeekDelta` in `aggregation/trends.ts` both special-case
+one reserved category name, `OUTSIDE_PSEUDO_CATEGORY` (`shared/constants.ts`): instead of
+resolving it from `category_rules` like every other category, they pull from
+`getOutsideTrend`, which sums location hours for every SSID label except
+`HOME_LOCATION_LABEL` ("Home", case-insensitive). This lets goals work identically for
+it (`goals.category = 'Outside'` is just a row like any other) while its actual data comes
+from an entirely different table. It's the one place category-based and location-based
+data intentionally overlap in the same API surface.
 
 ## Future extension points
 
 These were explicitly scoped out of v1 (see README "Future extension points" for the
 full, user-facing list): cloud sync/multi-device, mobile tracking, browsers without a
-Chromium-based Manifest V3 engine (e.g. legacy Firefox WebExtensions differences), a
-persistent retry queue for extension events sent while the desktop app is closed, and a
-packaged/signed installer (the `build` config in `desktop-app/package.json` is present
-but only the `npm run dev` path was exercised in this session).
+Chromium-based Manifest V3 engine (e.g. legacy Firefox WebExtensions differences), and a
+persistent retry queue for extension events sent while the desktop app is closed.
