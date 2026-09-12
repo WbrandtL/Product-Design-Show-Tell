@@ -36,10 +36,12 @@
     "extraResources": [{ "from": "resources", "to": "." }],
     "mac": {
       "category": "public.app-category.productivity",
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "resources/app-icon.png"
     },
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "resources/app-icon.png"
     }
   }
 }
