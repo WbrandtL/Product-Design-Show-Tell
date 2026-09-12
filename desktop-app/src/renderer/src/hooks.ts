@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type {
+  ActivityBreakdownRow,
   CategoryRule,
   CategoryTrendPoint,
   Goal,
@@ -65,6 +66,43 @@ export function useLocationTrend(range: RangeOption): LocationTrendPoint[] {
     void window.timeaware.getLocationTrend(range).then(setPoints)
   }, [range])
   return points
+}
+
+/**
+ * Fetches the "Outside" pseudo-category trend (hours away from the
+ * labeled "Home" Wi-Fi network) for a given range, shaped like a normal
+ * category trend so it can be charted the same way.
+ * Parameters:
+ *     range (RangeOption): '7d' or '30d'
+ *     refreshKey (number): bump this to force a re-fetch
+ * Returns:
+ *     points (CategoryTrendPoint[]): the trend data, empty while loading
+ */
+export function useOutsideTrend(range: RangeOption, refreshKey = 0): CategoryTrendPoint[] {
+  const [points, setPoints] = useState<CategoryTrendPoint[]>([])
+  useEffect(() => {
+    void window.timeaware.getOutsideTrend(range).then(setPoints)
+  }, [range, refreshKey])
+  return points
+}
+
+/**
+ * Fetches the real per-app/domain activity breakdown (duration, real
+ * activation counts, trend) for a range, optionally filtered to one
+ * category.
+ * Parameters:
+ *     category (string | null): category to filter to, or null for all
+ *     range (RangeOption): '7d' or '30d'
+ *     refreshKey (number): bump this to force a re-fetch
+ * Returns:
+ *     rows (ActivityBreakdownRow[]): the breakdown, empty while loading
+ */
+export function useActivityBreakdown(category: string | null, range: RangeOption, refreshKey = 0): ActivityBreakdownRow[] {
+  const [rows, setRows] = useState<ActivityBreakdownRow[]>([])
+  useEffect(() => {
+    void window.timeaware.getActivityBreakdown(category, range).then(setRows)
+  }, [category, range, refreshKey])
+  return rows
 }
 
 /**

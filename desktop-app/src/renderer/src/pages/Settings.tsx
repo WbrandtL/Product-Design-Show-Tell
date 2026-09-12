@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import CategoryRulesEditor from '../components/CategoryRulesEditor'
-import SsidLabeler from '../components/SsidLabeler'
+import { CategoryRulesEditor } from '../components/CategoryRulesEditor'
+import { SsidLabeler } from '../components/SsidLabeler'
 import { useCategoryRules, useSsidLabels, useTrackingStatus } from '../hooks'
 
 /**
@@ -30,43 +30,28 @@ export default function Settings(): JSX.Element {
   }
 
   return (
-    <>
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <h2 className="card-title">Categorization rules</h2>
-            <p className="card-subtitle">Map an app or domain to a category. Applies to future data on next view.</p>
-          </div>
-        </div>
-        <CategoryRulesEditor rules={rules} onChanged={handleRulesChanged} />
+    <div className="w-full max-w-5xl mx-auto space-y-6 pb-16">
+      <div className="border-b border-zinc-200/80 pb-4">
+        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Settings</h1>
+        <p className="text-xs sm:text-sm text-zinc-500 mt-0.5">Configure app categorization rules and network location labels.</p>
       </div>
 
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <h2 className="card-title">Locations</h2>
-            <p className="card-subtitle">Label Wi-Fi networks once to group time by location.</p>
-          </div>
-        </div>
-        <SsidLabeler labels={labels} unlabeled={unlabeled} onChanged={handleSsidsChanged} />
-      </div>
+      <CategoryRulesEditor rules={rules} onChanged={handleRulesChanged} />
+      <SsidLabeler labels={labels} unlabeled={unlabeled} onChanged={handleSsidsChanged} />
 
-      <div className="card">
-        <div className="card-header">
-          <div>
-            <h2 className="card-title">Browser extension</h2>
-            <p className="card-subtitle">
-              The TimeAware browser extension sends domain-level activity to this app over a local-only
-              connection — nothing leaves your machine.
-            </p>
-          </div>
-        </div>
-        <p className="goal-meta">
-          Local ingest server: <code>http://127.0.0.1:{status?.ingestServerPort ?? '…'}</code> — install the
-          unpacked extension from <code>browser-extension/</code> (see README) to enable per-domain tracking
-          while browsing. Without it, browser time is still tracked at the app level (e.g. "Chrome").
+      <div className="bg-white rounded-2xl border border-zinc-200 p-6 shadow-2xs">
+        <h2 className="text-base font-bold text-zinc-900 mb-1">Browser extension</h2>
+        <p className="text-xs text-zinc-500 mb-3">
+          The TimeAware browser extension sends domain-level activity to this app over a local-only connection —
+          nothing leaves your machine.
+        </p>
+        <p className="text-xs text-zinc-500">
+          Local ingest server: <code className="px-1.5 py-0.5 bg-zinc-100 rounded text-zinc-700">http://127.0.0.1:{status?.ingestServerPort ?? '…'}</code>
+          {' — install the unpacked extension from '}
+          <code className="px-1.5 py-0.5 bg-zinc-100 rounded text-zinc-700">browser-extension/</code>
+          {' (see README) to enable per-domain tracking while browsing. Without it, browser time is still tracked at the app level (e.g. "Chrome").'}
         </p>
       </div>
-    </>
+    </div>
   )
 }

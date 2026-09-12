@@ -1,36 +1,27 @@
 import { useState } from 'react'
-import Dashboard from './pages/Dashboard'
+import { Header } from './components/Header'
+import Trends from './pages/Trends'
 import Settings from './pages/Settings'
-import TrackingStatusBar from './components/TrackingStatusBar'
 
-type Tab = 'trends' | 'settings'
+type Tab = 'overview' | 'settings'
 
 /**
- * Root component: header with tab navigation and live tracking status, and
- * the active page body below it.
+ * Root component: the custom title bar (Header) and the active page below
+ * it — Trends (the default) or Settings.
  * Parameters:
  *     none
  * Returns:
  *     element (JSX.Element): the app shell
  */
 export default function App(): JSX.Element {
-  const [tab, setTab] = useState<Tab>('trends')
+  const [tab, setTab] = useState<Tab>('overview')
 
   return (
-    <div className="app-shell">
-      <header className="app-header">
-        <h1 className="app-title">TimeAware</h1>
-        <nav className="tab-nav">
-          <button className={`tab-button ${tab === 'trends' ? 'active' : ''}`} onClick={() => setTab('trends')}>
-            Trends
-          </button>
-          <button className={`tab-button ${tab === 'settings' ? 'active' : ''}`} onClick={() => setTab('settings')}>
-            Settings
-          </button>
-        </nav>
-        <TrackingStatusBar />
-      </header>
-      <main className="app-body">{tab === 'trends' ? <Dashboard /> : <Settings />}</main>
+    <div className="min-h-screen bg-[#F2F2F7] text-zinc-900 flex flex-col selection:bg-rose-100 selection:text-rose-900">
+      <Header activeTab={tab} setActiveTab={setTab} />
+      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
+        {tab === 'overview' ? <Trends /> : <Settings />}
+      </main>
     </div>
   )
 }
