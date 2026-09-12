@@ -13,6 +13,11 @@ import { destroyMainWindow, showMainWindow } from './windowManager'
 app.setName('TimeAware')
 
 const resourcesPath = app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources')
+
+if (process.platform === 'darwin') {
+  // Unpackaged dev builds otherwise show Electron's default dock icon.
+  app.dock?.setIcon(join(resourcesPath, 'app-icon.png'))
+}
 const preloadPath = join(__dirname, '../preload/index.js')
 
 let quitting = false
@@ -25,7 +30,7 @@ app.whenReady().then(() => {
   registerIpcHandlers(getDatabase, daemon)
 
   createTray(daemon, resourcesPath, {
-    onOpenDashboard: () => showMainWindow(preloadPath),
+    onOpenDashboard: () => showMainWindow(preloadPath, resourcesPath),
     onQuit: () => {
       quitting = true
       app.quit()
@@ -36,9 +41,9 @@ app.whenReady().then(() => {
   // to pause/resume it, matching the "single Start Tracking toggle" spec.
   daemon.start()
 
-  showMainWindow(preloadPath)
+  showMainWindow(preloadPath, resourcesPath)
 
-  app.on('activate', () => showMainWindow(preloadPath))
+  app.on('activate', () => showMainWindow(preloadPath, resourcesPath))
 
   void db
 })

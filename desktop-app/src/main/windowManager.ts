@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow, nativeImage, shell } from 'electron'
 import { join } from 'node:path'
 import { is } from './platform'
 
@@ -10,10 +10,11 @@ let mainWindow: BrowserWindow | null = null
  * user clicks its close button, so the app keeps running from the tray.
  * Parameters:
  *     preloadPath (string): absolute path to the compiled preload script
+ *     resourcesPath (string): absolute path to the app's resources directory (for the window/taskbar icon)
  * Returns:
  *     window (BrowserWindow): the app's single window
  */
-export function showMainWindow(preloadPath: string): BrowserWindow {
+export function showMainWindow(preloadPath: string, resourcesPath: string): BrowserWindow {
   if (mainWindow) {
     mainWindow.show()
     mainWindow.focus()
@@ -26,6 +27,7 @@ export function showMainWindow(preloadPath: string): BrowserWindow {
     minWidth: 820,
     minHeight: 560,
     title: 'TimeAware',
+    icon: nativeImage.createFromPath(join(resourcesPath, 'app-icon.png')),
     show: false,
     webPreferences: {
       preload: preloadPath,
