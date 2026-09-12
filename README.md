@@ -116,6 +116,26 @@ pick up the new build.
    domain-level data can), add the same kind of `NOT EXISTS` minute-bucket exclusion used
    for browser apps in `getAppMsByDate` — see ARCHITECTURE.md "Double-counting avoidance."
 
+## How new apps/domains get categorized automatically
+
+The first time the tracking daemon or the browser extension sees a given app name or
+domain, `autoCategorizeIfNew()` (`desktop-app/src/main/db/categoryRulesRepo.ts`) runs a
+small **keyword heuristic** (`guessCategory()` in `aggregation/categorize.ts`) against it —
+plain case-insensitive substring matching against a static, fully-readable keyword table
+(e.g. "slack"/"zoom"/"teams" → Communication, "code"/"terminal"/"figma" → Deep Work,
+"spotify"/"netflix" → Entertainment). If it matches, a real row is written to
+`category_rules` immediately, marked `auto_suggested`. **No network call, no ML model** —
+every guess traces back to one keyword in that table, consistent with the rest of the app
+staying fully on-device and inspectable. This also runs once at startup over every
+app/domain already in `raw_events`, so pre-existing history gets categorized too, not just
+new activity going forward.
+
+This is a convenience, not a guarantee — the Settings screen visibly badges
+`auto-suggested` rows so you know which categories were guessed vs. chosen, and you should
+skim them once. Overriding one (re-add the same app/domain with a different category) or
+deleting one both stick permanently: a `category_auto_attempts` table records that pattern
+was already tried, so it's never re-guessed just because the app was used again.
+
 ## How to extend categorization rules
 
 - **From the UI**: Settings → Categorization rules → pick "app name" or "domain", type the
@@ -124,10 +144,15 @@ pick up the new build.
   is intentionally simple for v1 rather than glob/regex.
 - **Programmatically / in bulk**: add entries to `DEFAULT_CATEGORY_RULES` in
   `desktop-app/src/main/db/schema.ts` — new entries are seeded (via `INSERT OR IGNORE`) on
-  every app launch without touching rules a user has already customized.
+  every app launch without touching rules a user has already customized. To extend the
+  auto-categorizer's guesses instead, add keywords to `HEURISTIC_RULES` in
+  `desktop-app/src/main/aggregation/categorize.ts`.
 - Rule changes only affect **future** aggregation queries (categorization happens at
   read-time from `raw_events`, not at write-time), so re-categorizing history is free —
   just change the rule and the trend chart reflects it on next refresh.
+- **Goal category names must match a rule's category exactly** (case-sensitive) — a goal
+  for "Productivity" does nothing useful unless some rule actually produces the category
+  "Productivity" (the shipped defaults and heuristic use "Deep Work" instead).
 
 ## Future extension points (explicitly out of scope for v1)
 

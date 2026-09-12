@@ -29,7 +29,18 @@ CREATE TABLE IF NOT EXISTS category_rules (
   pattern TEXT NOT NULL,
   category TEXT NOT NULL,
   is_default INTEGER NOT NULL DEFAULT 0,
+  auto_suggested INTEGER NOT NULL DEFAULT 0,
   UNIQUE (match_type, pattern)
+);
+
+-- Records every (match_type, pattern) the auto-categorizer has ever tried,
+-- whether or not it produced a guess. This is what makes deleting an
+-- auto-suggested rule "stick": once attempted, it is never retried, so a
+-- deleted guess doesn't just reappear on the next matching event.
+CREATE TABLE IF NOT EXISTS category_auto_attempts (
+  match_type TEXT NOT NULL CHECK (match_type IN ('app', 'domain')),
+  pattern TEXT NOT NULL,
+  PRIMARY KEY (match_type, pattern)
 );
 
 CREATE TABLE IF NOT EXISTS ssid_labels (

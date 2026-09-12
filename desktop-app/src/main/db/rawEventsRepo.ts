@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { autoCategorizeIfNew } from './categoryRulesRepo'
 import type { BrowserEventInput, DesktopEventInput, EventSource, RawEvent } from '../../shared/types'
 
 interface RawEventRow {
@@ -47,6 +48,7 @@ export function insertDesktopEvent(db: Database.Database, event: DesktopEventInp
     isIdle: event.isIdle ? 1 : 0,
     ssid: event.ssid
   })
+  autoCategorizeIfNew(db, 'app', event.appName)
 }
 
 /**
@@ -69,6 +71,7 @@ export function insertBrowserEvent(db: Database.Database, event: BrowserEventInp
     domain: event.domain,
     isIdle: event.isIdle ? 1 : 0
   })
+  autoCategorizeIfNew(db, 'domain', event.domain)
 }
 
 /**

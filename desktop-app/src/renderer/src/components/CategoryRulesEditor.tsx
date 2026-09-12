@@ -9,7 +9,12 @@ interface Props {
 /**
  * Table + inline form for the app/domain -> category mapping. Deleting a
  * default rule just removes that one mapping (it can be re-added); it does
- * not affect already-recorded raw events, only future categorization.
+ * not affect already-recorded raw events, only future categorization. Rows
+ * marked "auto-suggested" were guessed by the built-in keyword heuristic
+ * the first time that app/domain was observed (see README "How new
+ * apps/domains get categorized automatically") — worth a glance, since a
+ * guess can be wrong; re-adding the same pattern with a different category
+ * overrides it and clears the "auto-suggested" flag.
  * Parameters:
  *     rules (CategoryRule[]): all configured rules
  *     onChanged (() => void): called after an add/delete, to trigger a re-fetch
@@ -44,6 +49,7 @@ export default function CategoryRulesEditor({ rules, onChanged }: Props): JSX.El
             <th>Matches</th>
             <th>Category</th>
             <th />
+            <th />
           </tr>
         </thead>
         <tbody>
@@ -52,6 +58,7 @@ export default function CategoryRulesEditor({ rules, onChanged }: Props): JSX.El
               <td>{rule.matchType}</td>
               <td>{rule.pattern}</td>
               <td>{rule.category}</td>
+              <td>{rule.autoSuggested && <span className="rule-badge">auto-suggested</span>}</td>
               <td>
                 <button className="text-button" onClick={() => void handleDelete(rule.id)}>
                   remove

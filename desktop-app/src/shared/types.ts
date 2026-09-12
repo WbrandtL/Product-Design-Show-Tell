@@ -38,13 +38,15 @@ export interface BrowserEventInput {
 
 export type CategoryMatchType = 'app' | 'domain'
 
-/** A user-editable (or default-seeded) rule mapping an app/domain to a category. */
+/** A user-editable (default-seeded, auto-suggested, or user-added) rule mapping an app/domain to a category. */
 export interface CategoryRule {
   id: number
   matchType: CategoryMatchType
   pattern: string
   category: string
   isDefault: boolean
+  /** True if this rule was created by the keyword-heuristic auto-categorizer, not a human. */
+  autoSuggested: boolean
 }
 
 /** A user label for a Wi-Fi SSID, e.g. "AndreasWifi" -> "Home". */
