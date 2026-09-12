@@ -4,7 +4,14 @@ import { IPC } from '../shared/ipcChannels'
 import type { CategoryMatchType, GoalConstraintType, RangeOption } from '../shared/types'
 import type { TrackingDaemon } from './tracking/trackingDaemon'
 import { INGEST_SERVER_PORT } from './server/ingestServer'
-import { getCategoryTrend, getGoalProgress, getLocationTrend, getWeekOverWeekDelta } from './aggregation/trends'
+import {
+  getActivityBreakdown,
+  getCategoryTrend,
+  getGoalProgress,
+  getLocationTrend,
+  getOutsideTrend,
+  getWeekOverWeekDelta
+} from './aggregation/trends'
 import {
   deleteCategoryRule,
   getAllCategoryRules,
@@ -12,6 +19,7 @@ import {
 } from './db/categoryRulesRepo'
 import { clearGoal, getAllGoals, setGoal } from './db/goalsRepo'
 import { deleteSsidLabel, getAllSsidLabels, getUnlabeledObservedSsids, setSsidLabel } from './db/ssidLabelsRepo'
+import { getMainWindow } from './windowManager'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -59,6 +67,16 @@ export function registerIpcHandlers(getDb: () => Database.Database, daemon: Trac
     return getLocationTrend(getDb(), startMs, endMs)
   })
 
+  ipcMain.handle(IPC.getOutsideTrend, (_event, range: RangeOption) => {
+    const { startMs, endMs } = resolveRange(range)
+    return getOutsideTrend(getDb(), startMs, endMs)
+  })
+
+  ipcMain.handle(IPC.getActivityBreakdown, (_event, category: string | null, range: RangeOption) => {
+    const { startMs, endMs } = resolveRange(range)
+    return getActivityBreakdown(getDb(), category, startMs, endMs)
+  })
+
   ipcMain.handle(IPC.getWeekOverWeekDelta, () => getWeekOverWeekDelta(getDb()))
   ipcMain.handle(IPC.getGoalProgress, () => getGoalProgress(getDb()))
 
@@ -82,4 +100,11 @@ export function registerIpcHandlers(getDb: () => Database.Database, daemon: Trac
   ipcMain.handle(IPC.setSsidLabel, (_event, ssid: string, label: string) => setSsidLabel(getDb(), ssid, label))
   ipcMain.handle(IPC.deleteSsidLabel, (_event, ssid: string) => deleteSsidLabel(getDb(), ssid))
   ipcMain.handle(IPC.getUnlabeledSsids, () => getUnlabeledObservedSsids(getDb()))
+
+  ipcMain.handle(IPC.hideWindow, () => getMainWindow()?.hide())
+  ipcMain.handle(IPC.minimizeWindow, () => getMainWindow()?.minimize())
+  ipcMain.handle(IPC.toggleFullScreenWindow, () => {
+    const window = getMainWindow()
+    if (window) window.setFullScreen(!window.isFullScreen())
+  })
 }

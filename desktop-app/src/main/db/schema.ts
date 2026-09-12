@@ -68,11 +68,11 @@ export const DEFAULT_CATEGORY_RULES: Array<{
   pattern: string
   category: string
 }> = [
-  { matchType: 'app', pattern: 'Visual Studio Code', category: 'Deep Work' },
-  { matchType: 'app', pattern: 'Code', category: 'Deep Work' },
-  { matchType: 'app', pattern: 'Xcode', category: 'Deep Work' },
-  { matchType: 'app', pattern: 'Terminal', category: 'Deep Work' },
-  { matchType: 'app', pattern: 'iTerm2', category: 'Deep Work' },
+  { matchType: 'app', pattern: 'Visual Studio Code', category: 'Productivity' },
+  { matchType: 'app', pattern: 'Code', category: 'Productivity' },
+  { matchType: 'app', pattern: 'Xcode', category: 'Productivity' },
+  { matchType: 'app', pattern: 'Terminal', category: 'Productivity' },
+  { matchType: 'app', pattern: 'iTerm2', category: 'Productivity' },
   { matchType: 'app', pattern: 'Slack', category: 'Communication' },
   { matchType: 'app', pattern: 'Microsoft Teams', category: 'Communication' },
   { matchType: 'app', pattern: 'Mail', category: 'Communication' },
@@ -81,10 +81,10 @@ export const DEFAULT_CATEGORY_RULES: Array<{
   { matchType: 'app', pattern: 'Spotify', category: 'Entertainment' },
   { matchType: 'app', pattern: 'Music', category: 'Entertainment' },
   { matchType: 'app', pattern: 'Steam', category: 'Entertainment' },
-  { matchType: 'domain', pattern: 'github.com', category: 'Deep Work' },
-  { matchType: 'domain', pattern: 'stackoverflow.com', category: 'Deep Work' },
-  { matchType: 'domain', pattern: 'developer.mozilla.org', category: 'Deep Work' },
-  { matchType: 'domain', pattern: 'docs.google.com', category: 'Deep Work' },
+  { matchType: 'domain', pattern: 'github.com', category: 'Productivity' },
+  { matchType: 'domain', pattern: 'stackoverflow.com', category: 'Productivity' },
+  { matchType: 'domain', pattern: 'developer.mozilla.org', category: 'Productivity' },
+  { matchType: 'domain', pattern: 'docs.google.com', category: 'Productivity' },
   { matchType: 'domain', pattern: 'mail.google.com', category: 'Communication' },
   { matchType: 'domain', pattern: 'slack.com', category: 'Communication' },
   { matchType: 'domain', pattern: 'youtube.com', category: 'Entertainment' },
@@ -98,8 +98,7 @@ export const DEFAULT_CATEGORY_RULES: Array<{
   { matchType: 'domain', pattern: 'tiktok.com', category: 'Social Media' }
 ]
 
-/** Fallback category used when no rule matches an app or domain. */
-export const UNCATEGORIZED = 'Uncategorized'
-
-/** Fallback location label used when an SSID has no user-defined label. */
-export const DEFAULT_LOCATION_LABEL = 'Other'
+// UNCATEGORIZED, DEFAULT_LOCATION_LABEL, OUTSIDE_PSEUDO_CATEGORY, and
+// HOME_LOCATION_LABEL moved to ../../shared/constants.ts so the renderer
+// can reference them without reaching into main-process-only modules.
+export { UNCATEGORIZED, DEFAULT_LOCATION_LABEL, OUTSIDE_PSEUDO_CATEGORY, HOME_LOCATION_LABEL } from '../../shared/constants'

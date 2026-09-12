@@ -93,6 +93,23 @@ export interface GoalProgress {
   averageDailyHoursLast7Days: number
 }
 
+/**
+ * One app or domain's real, derived activity within a range: total duration
+ * plus "activations" — the number of distinct times it became the focused
+ * app/tab, computed from contiguous runs in the raw_events stream (never
+ * fabricated). trendPercent/direction compare against the equal-length
+ * period immediately before the range.
+ */
+export interface ActivityBreakdownRow {
+  name: string
+  matchType: CategoryMatchType
+  category: string
+  durationMs: number
+  activations: number
+  trendPercent: number | null
+  direction: 'up' | 'down' | 'stable'
+}
+
 export interface TrackingStatus {
   isTracking: boolean
   lastPolledAt: number | null

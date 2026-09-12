@@ -46,6 +46,11 @@ function migrateSchema(database: Database.Database): void {
   if (!hasAutoSuggested) {
     database.exec(`ALTER TABLE category_rules ADD COLUMN auto_suggested INTEGER NOT NULL DEFAULT 0`)
   }
+
+  // "Deep Work" was renamed to "Productivity" (matches the UI and, for
+  // anyone who already set a "Productivity" goal, makes it actually work).
+  // Idempotent: a no-op once no "Deep Work" rows remain.
+  database.exec(`UPDATE category_rules SET category = 'Productivity' WHERE category = 'Deep Work'`)
 }
 
 /**

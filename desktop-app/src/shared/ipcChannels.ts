@@ -5,6 +5,8 @@ export const IPC = {
   stopTracking: 'timeaware:stopTracking',
   getCategoryTrend: 'timeaware:getCategoryTrend',
   getLocationTrend: 'timeaware:getLocationTrend',
+  getOutsideTrend: 'timeaware:getOutsideTrend',
+  getActivityBreakdown: 'timeaware:getActivityBreakdown',
   getWeekOverWeekDelta: 'timeaware:getWeekOverWeekDelta',
   getGoalProgress: 'timeaware:getGoalProgress',
   getGoals: 'timeaware:getGoals',
@@ -16,5 +18,8 @@ export const IPC = {
   getSsidLabels: 'timeaware:getSsidLabels',
   setSsidLabel: 'timeaware:setSsidLabel',
   deleteSsidLabel: 'timeaware:deleteSsidLabel',
-  getUnlabeledSsids: 'timeaware:getUnlabeledSsids'
+  getUnlabeledSsids: 'timeaware:getUnlabeledSsids',
+  hideWindow: 'timeaware:hideWindow',
+  minimizeWindow: 'timeaware:minimizeWindow',
+  toggleFullScreenWindow: 'timeaware:toggleFullScreenWindow'
 } as const

@@ -18,6 +18,9 @@ const timeawareApi = {
 
   getCategoryTrend: (range: RangeOption) => ipcRenderer.invoke(IPC.getCategoryTrend, range),
   getLocationTrend: (range: RangeOption) => ipcRenderer.invoke(IPC.getLocationTrend, range),
+  getOutsideTrend: (range: RangeOption) => ipcRenderer.invoke(IPC.getOutsideTrend, range),
+  getActivityBreakdown: (category: string | null, range: RangeOption) =>
+    ipcRenderer.invoke(IPC.getActivityBreakdown, category, range),
   getWeekOverWeekDelta: () => ipcRenderer.invoke(IPC.getWeekOverWeekDelta),
   getGoalProgress: () => ipcRenderer.invoke(IPC.getGoalProgress),
 
@@ -34,7 +37,11 @@ const timeawareApi = {
   getSsidLabels: () => ipcRenderer.invoke(IPC.getSsidLabels),
   setSsidLabel: (ssid: string, label: string) => ipcRenderer.invoke(IPC.setSsidLabel, ssid, label),
   deleteSsidLabel: (ssid: string) => ipcRenderer.invoke(IPC.deleteSsidLabel, ssid),
-  getUnlabeledSsids: () => ipcRenderer.invoke(IPC.getUnlabeledSsids)
+  getUnlabeledSsids: () => ipcRenderer.invoke(IPC.getUnlabeledSsids),
+
+  hideWindow: () => ipcRenderer.invoke(IPC.hideWindow),
+  minimizeWindow: () => ipcRenderer.invoke(IPC.minimizeWindow),
+  toggleFullScreenWindow: () => ipcRenderer.invoke(IPC.toggleFullScreenWindow)
 }
 
 contextBridge.exposeInMainWorld('timeaware', timeawareApi)

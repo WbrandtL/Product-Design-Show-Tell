@@ -1,4 +1,5 @@
 import type {
+  ActivityBreakdownRow,
   CategoryMatchType,
   CategoryRule,
   CategoryTrendPoint,
@@ -20,6 +21,8 @@ interface TimeawareApi {
 
   getCategoryTrend: (range: RangeOption) => Promise<CategoryTrendPoint[]>
   getLocationTrend: (range: RangeOption) => Promise<LocationTrendPoint[]>
+  getOutsideTrend: (range: RangeOption) => Promise<CategoryTrendPoint[]>
+  getActivityBreakdown: (category: string | null, range: RangeOption) => Promise<ActivityBreakdownRow[]>
   getWeekOverWeekDelta: () => Promise<WeekOverWeekDelta[]>
   getGoalProgress: () => Promise<GoalProgress[]>
 
@@ -35,6 +38,10 @@ interface TimeawareApi {
   setSsidLabel: (ssid: string, label: string) => Promise<void>
   deleteSsidLabel: (ssid: string) => Promise<void>
   getUnlabeledSsids: () => Promise<string[]>
+
+  hideWindow: () => Promise<void>
+  minimizeWindow: () => Promise<void>
+  toggleFullScreenWindow: () => Promise<void>
 }
 
 declare global {

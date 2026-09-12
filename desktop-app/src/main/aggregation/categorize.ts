@@ -67,7 +67,7 @@ const HEURISTIC_RULES: ReadonlyArray<{ category: string; keywords: readonly stri
     ]
   },
   {
-    category: 'Deep Work',
+    category: 'Productivity',
     keywords: [
       'code', 'terminal', 'studio', 'editor', 'docs.google', 'github', 'gitlab',
       'notion', 'linear', 'figma', 'postman', 'docker', 'xcode', 'iterm', 'vim',

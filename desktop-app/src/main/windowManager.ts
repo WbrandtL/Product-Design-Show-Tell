@@ -29,6 +29,11 @@ export function showMainWindow(preloadPath: string, resourcesPath: string): Brow
     title: 'TimeAware',
     icon: nativeImage.createFromPath(join(resourcesPath, 'app-icon.png')),
     show: false,
+    // Fully frameless: the renderer draws its own traffic-light dots and
+    // controls the real window over IPC (see hideWindow/minimizeWindow/
+    // toggleFullScreenWindow below) — avoids stacking native chrome on
+    // top of the design's own custom title bar.
+    frame: false,
     webPreferences: {
       preload: preloadPath,
       contextIsolation: true,
@@ -69,4 +74,17 @@ export function showMainWindow(preloadPath: string, resourcesPath: string): Brow
 export function destroyMainWindow(): void {
   mainWindow?.destroy()
   mainWindow = null
+}
+
+/**
+ * Returns the current main window, or null if it hasn't been created (or
+ * was destroyed) yet. Used by the window-control IPC handlers, which the
+ * frameless custom title bar's traffic-light dots call into.
+ * Parameters:
+ *     none
+ * Returns:
+ *     window (BrowserWindow | null): the app's single window, if it exists
+ */
+export function getMainWindow(): BrowserWindow | null {
+  return mainWindow
 }
