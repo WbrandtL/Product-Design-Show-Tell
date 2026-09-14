@@ -23,12 +23,33 @@ cp .env.example .env
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
-Open http://localhost:8000/ for the test page, or http://localhost:8000/healthz to
-check status.
+Open http://localhost:8000/ for the test page, http://localhost:8000/docs for an
+interactive Swagger UI (try requests straight from the browser, no curl needed), or
+http://localhost:8000/healthz to check status.
 
 If `GROQ_API_KEY` is unset, or the Groq call fails twice, or it times out after 30s,
 the backend serves a pre-baked fixture response instead (`meta.model = "fixture"`).
 The test page and all three sample passages work fully with no network access.
+
+## Testing the pipeline directly (fastest option)
+
+No server, no browser — calls `run_explain_pipeline()` in-process, the exact same
+code path `/v1/explain` uses (cache, extraction, repair, span verification, fixture
+fallback):
+
+```bash
+.venv/bin/python scripts/try_explain.py --sample trust
+.venv/bin/python scripts/try_explain.py --sample climate_feedback --mode explain_to_others
+.venv/bin/python scripts/try_explain.py --file my_passage.txt
+.venv/bin/python scripts/try_explain.py --text "any passage of 200-4000 characters..."
+echo "..." | .venv/bin/python scripts/try_explain.py --stdin
+.venv/bin/python scripts/try_explain.py --sample trust --json   # raw JSON instead of the formatted view
+```
+
+Prints a colorized breakdown: pattern/layout, takeaway, nodes grouped by emphasis
+with their source spans, edges tagged `[stated]`/`[inferred]`, glossary, and the
+`meta` block (model, cache hit, latency, span verification counts) — the fastest way
+to sanity-check a prompt change or a new passage without touching a server or a UI.
 
 ## Tests
 
@@ -140,6 +161,7 @@ app/__init__.py  main.py  schema.py  llm.py  prompts.py  verify.py  cache.py  sa
 app/static/index.html
 fixtures/*.json
 logs/.gitkeep
+scripts/try_explain.py
 tests/test_verify.py  tests/test_schema.py
 .env.example  requirements.txt  README.md
 ```
