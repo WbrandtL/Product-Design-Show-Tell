@@ -1,0 +1,171 @@
+{
+  "id": "2572d99e-1ede-4872-a9f8-3fbd2ef43f60",
+  "schema_version": "1.0",
+  "passage_pattern": "causal_chain",
+  "layout_hint": "flow",
+  "takeaway": "Thawing permafrost releases carbon that causes warming, which thaws more permafrost.",
+  "explain_script": "Warming thaws frozen ground, which lets microbes release the carbon trapped inside it. That released carbon warms the planet further, which thaws even more ground. Scientists disagree about how fast this cycle can run.",
+  "nodes": [
+    {
+      "id": "warming",
+      "label": "rising Arctic temperatures",
+      "plain_label": "the Arctic getting warmer",
+      "kind": "concept",
+      "one_line": "The starting trigger that begins the whole feedback cycle.",
+      "emphasis": 1,
+      "source_span": [
+        0,
+        26
+      ],
+      "quote": "Rising Arctic temperatures"
+    },
+    {
+      "id": "thaw",
+      "label": "thawed permafrost",
+      "plain_label": "frozen ground melting",
+      "kind": "concept",
+      "one_line": "Frozen soil that melts and lets stored carbon escape.",
+      "emphasis": 1,
+      "source_span": [
+        48,
+        65
+      ],
+      "quote": "thawed permafrost"
+    },
+    {
+      "id": "carbon_release",
+      "label": "released organic carbon",
+      "plain_label": "carbon escaping into the air",
+      "kind": "concept",
+      "one_line": "Carbon dioxide and methane produced as microbes decompose the soil.",
+      "emphasis": 2,
+      "source_span": [
+        75,
+        96
+      ],
+      "quote": "stored organic carbon"
+    },
+    {
+      "id": "feedback",
+      "label": "permafrost carbon feedback",
+      "plain_label": "the self-reinforcing warming cycle",
+      "kind": "concept",
+      "one_line": "The named cycle where warming causes thaw, which causes more warming.",
+      "emphasis": 2,
+      "source_span": [
+        340,
+        366
+      ],
+      "quote": "permafrost carbon feedback"
+    },
+    {
+      "id": "abrupt_thaw",
+      "label": "abrupt thaw features",
+      "plain_label": "sudden collapse of frozen ground",
+      "kind": "evidence",
+      "one_line": "A disputed possibility that carbon could be released much faster.",
+      "emphasis": 3,
+      "source_span": [
+        725,
+        742
+      ],
+      "quote": "thermokarst lakes"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "warming",
+      "target": "thaw",
+      "relation": "causes",
+      "label": "causes",
+      "evidentiality": "stated",
+      "source_span": [
+        0,
+        42
+      ],
+      "quote": "Rising Arctic temperatures thaw permafrost"
+    },
+    {
+      "id": "e2",
+      "source": "thaw",
+      "target": "carbon_release",
+      "relation": "causes",
+      "label": "releases",
+      "evidentiality": "stated",
+      "source_span": [
+        48,
+        96
+      ],
+      "quote": "thawed permafrost releases stored organic carbon"
+    },
+    {
+      "id": "e3",
+      "source": "carbon_release",
+      "target": "warming",
+      "relation": "causes",
+      "label": "contributes to further",
+      "evidentiality": "stated",
+      "source_span": [
+        240,
+        270
+      ],
+      "quote": "contributes to further warming"
+    },
+    {
+      "id": "e4",
+      "source": "warming",
+      "target": "feedback",
+      "relation": "example_of",
+      "label": "is an instance of",
+      "evidentiality": "stated",
+      "source_span": [
+        309,
+        366
+      ],
+      "quote": "a process researchers call the permafrost carbon feedback"
+    },
+    {
+      "id": "e5",
+      "source": "abrupt_thaw",
+      "target": "feedback",
+      "relation": "refines",
+      "label": "may accelerate",
+      "evidentiality": "inferred",
+      "source_span": null,
+      "quote": null
+    }
+  ],
+  "glossary": [
+    {
+      "term": "permafrost",
+      "plain_definition": "Ground that stays frozen year-round for a long time.",
+      "in_this_passage": "The frozen soil that stores carbon and is now thawing.",
+      "source_span": [
+        32,
+        42
+      ]
+    },
+    {
+      "term": "thermokarst lakes",
+      "plain_definition": "Lakes formed when thawing ground collapses and fills with water.",
+      "in_this_passage": "A feature some scientists say could release carbon abruptly.",
+      "source_span": [
+        725,
+        742
+      ]
+    }
+  ],
+  "simplifications": [
+    "Treats the feedback loop as one cycle when timescales for its steps vary widely.",
+    "Compresses a live scientific disagreement about abrupt thaw into a single arrow."
+  ],
+  "meta": {
+    "model": "fixture",
+    "latency_ms": 1500,
+    "cached": false,
+    "spans_verified": 0,
+    "spans_repaired": 0,
+    "spans_dropped": 0
+  }
+}
