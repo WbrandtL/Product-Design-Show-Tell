@@ -12,6 +12,26 @@ const { createWidgetWindow, createModalWindow } = require("./lib/windows");
 
 const CAPTURE_SHORTCUT = "CommandOrControl+Shift+G";
 
+// Without this, double-clicking the app (or the DMG's mounted copy) a second
+// time while it's already running spawns a fully independent process - a
+// second floating icon stacked exactly on top of the first, competing for
+// the same global shortcut, with its own separate (and possibly stale)
+// state. A click can land on whichever one happens to be on top, and
+// quitting one leaves the other running, so macOS still reports the app as
+// open. Refusing the second launch and focusing the existing instance
+// instead avoids all of that.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (widgetWin) {
+      widgetWin.show();
+      widgetWin.focus();
+    }
+  });
+}
+
 // Last line of defense: an unhandled rejection anywhere must never leave the
 // widget stuck in its busy state with no way to recover short of a restart.
 process.on("unhandledRejection", (err) => {
@@ -221,6 +241,12 @@ function showWidgetContextMenu() {
 }
 
 app.whenReady().then(async () => {
+  // app.quit() (called above when the lock wasn't acquired) doesn't halt
+  // execution synchronously, so without this a losing second instance could
+  // still reach here and create its own competing windows before the quit
+  // actually takes effect.
+  if (!gotSingleInstanceLock) return;
+
   if (process.platform === "darwin") app.dock.hide();
 
   library.init(app.getPath("userData"));
