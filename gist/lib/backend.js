@@ -1,5 +1,6 @@
 "use strict";
 
+const { app } = require("electron");
 const { spawn } = require("child_process");
 const http = require("http");
 const https = require("https");
@@ -14,7 +15,7 @@ const BASE_URL = `http://127.0.0.1:${PORT}`;
 // spawning a local Python process - a reviewer's machine has no venv, no
 // Groq key, and shouldn't need either. `npm start` (dev mode) is unaffected:
 // it still spawns/reuses a local backend, unless GIST_BACKEND_URL is set.
-const HOSTED_BACKEND_URL = "";
+const HOSTED_BACKEND_URL = "https://designtask1.onrender.com";
 
 // Packaged (.app) and unpacked (`electron .`) runs resolve __dirname
 // differently, and a packaged app's Resources dir isn't next to the actual
@@ -39,11 +40,14 @@ const UVICORN_BIN = path.join(BACKEND_DIR, ".venv", "bin", "uvicorn");
 let child = null;
 
 // A GIST_BACKEND_URL env var always wins (handy for testing a hosted deploy
-// without rebuilding); otherwise a packaged build uses HOSTED_BACKEND_URL if
-// one has been set, and dev mode (`npm start`) falls back to spawning/
-// reusing a local process on BASE_URL.
+// from a dev run without rebuilding). Otherwise only a packaged build uses
+// HOSTED_BACKEND_URL - `npm start` (dev mode) keeps spawning/reusing a local
+// process on BASE_URL, so local backend development doesn't need this file
+// touched again every time.
 function resolveRemoteUrl() {
-  return process.env.GIST_BACKEND_URL || HOSTED_BACKEND_URL || null;
+  if (process.env.GIST_BACKEND_URL) return process.env.GIST_BACKEND_URL;
+  if (app.isPackaged) return HOSTED_BACKEND_URL || null;
+  return null;
 }
 
 /**
