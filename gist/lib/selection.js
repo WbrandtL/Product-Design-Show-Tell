@@ -57,9 +57,17 @@ async function getFrontmostAppName() {
  * is the one this needs.
  *
  * The `activate` call is still done via osascript - unlike the keystroke,
- * this only needs Automation permission (to tell a named app to come to
- * the front), which has been reliable in testing, and re-doing it natively
- * would need per-app window lookups nut-js doesn't provide.
+ * this needs Automation permission (Gist -> the named target app)
+ * specifically, a separate grant from Accessibility, one for every app the
+ * user ever copies from. Unlike Accessibility, nothing here has confirmed
+ * that grant reliably auto-prompts on a fresh machine - so this step is
+ * deliberately non-fatal: if it fails (permission not yet granted, or never
+ * offered), we swallow it and still attempt the keystroke, on the theory
+ * that the widget window's own `focusable: false` should already keep it
+ * from stealing frontmost status in the first place, making the explicit
+ * reactivation a belt-and-braces step rather than a strict requirement. A
+ * failure here must never block the one thing that actually needs to
+ * succeed.
  *
  * Requires Gist to be granted Accessibility permission in System Settings
  * > Privacy & Security > Accessibility.
@@ -68,7 +76,11 @@ async function getFrontmostAppName() {
  */
 async function sendCopyKeystroke(targetAppName) {
   if (targetAppName) {
-    await execFileAsync("osascript", ["-e", `tell application "${asQuoted(targetAppName)}" to activate`]);
+    try {
+      await execFileAsync("osascript", ["-e", `tell application "${asQuoted(targetAppName)}" to activate`]);
+    } catch {
+      // Non-fatal by design - see comment above.
+    }
   }
   await keyboard.pressKey(Key.LeftCmd, Key.C);
   await keyboard.releaseKey(Key.LeftCmd, Key.C);
