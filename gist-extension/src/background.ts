@@ -3,7 +3,7 @@
 // localhost directly; a request from here is covered by this extension's
 // own host_permissions instead, so no CORS setup is needed on the backend.
 
-const BACKEND_URL = "http://localhost:8000";
+const BACKEND_URL = "https://designtask1.onrender.com";
 
 interface ExplainRequest {
   type: "explain";

@@ -16,6 +16,12 @@ gist-backend/    FastAPI service: LLM extraction, span verification, cache, fixt
 gist-extension/  Manifest V3 browser extension: floating icon, on-device library, diagram renderer
 ```
 
+`gist-extension` is preconfigured to call a hosted `gist-backend` instance at
+`https://designtask1.onrender.com` — load `gist-extension/dist/` as an
+unpacked extension (`chrome://extensions` → Developer mode → Load unpacked)
+and it works with no local setup at all. The steps below are only for
+running/modifying the backend yourself.
+
 ## Setup — backend
 
 ```bash
