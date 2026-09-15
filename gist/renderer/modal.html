@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Gist Library</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,300;6..72,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper-outer: #EBE5DD;
+  --paper: #F4F0EA;
+  --paper-light: #FBF9F5;
+  --ink: #1A1815;
+  --ink-soft: #4A4540;
+  --rule: rgba(26,24,21,.18);
+  --rule-strong: rgba(26,24,21,.45);
+  --accent: #EBD79B;
+  --group-a: #EBD79B; /* gold */
+  --group-b: #D9DEC8; /* sage */
+  --group-c: #E8CFC4; /* terracotta */
+  --group-d: #CFD8DE; /* blue-grey */
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--paper-outer); color: var(--ink);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.mono { font-family: "IBM Plex Mono", ui-monospace, monospace; }
+.serif { font-family: "Newsreader", Georgia, serif; }
+
+#titlebar {
+  height: 40px; -webkit-app-region: drag; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  border-bottom: 1px solid var(--ink);
+  font: 400 9.5px/1 "IBM Plex Mono"; letter-spacing: .14em; text-transform: uppercase; color: var(--ink); opacity: .7;
+}
+
+#body { flex: 1; display: flex; align-items: center; justify-content: center; padding: 34px; overflow: auto; }
+#panel { width: 100%; max-width: 840px; display: flex; border: 1px solid var(--ink); background: var(--paper); }
+
+/* ---------- card (left) ---------- */
+#card-pane { flex: 1; min-width: 0; padding: 30px; display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--ink); }
+#card {
+  width: 100%; max-width: 460px; min-height: 380px; border: 1px solid var(--ink);
+  background: var(--paper-light); display: flex; flex-direction: column;
+}
+#card-head { display: flex; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--rule); font: 400 8.5px/1 "IBM Plex Mono"; color: var(--ink-soft); letter-spacing: .14em; text-transform: uppercase; }
+#card-body { flex: 1; display: flex; flex-direction: column; justify-content: center; padding: 22px 20px; overflow: auto; }
+#card-foot { padding: 14px 20px; border-top: 1px solid var(--rule); display: flex; justify-content: space-between; align-items: center; font: 400 8.5px/1.6 "IBM Plex Mono"; color: var(--ink-soft); letter-spacing: .08em; text-transform: uppercase; }
+#card-foot .dash { width: 14px; height: 1px; background: var(--ink); }
+
+/* ---------- actions (right) ---------- */
+#actions { width: 250px; flex: none; display: flex; flex-direction: column; }
+.actions-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--ink); font: 400 9.5px/1 "IBM Plex Mono"; letter-spacing: .14em; text-transform: uppercase; }
+.actions-header .close-btn { cursor: pointer; }
+.actions-header .close-btn:hover { opacity: .55; }
+
+.section { padding: 16px; border-bottom: 1px solid var(--rule); display: flex; flex-direction: column; gap: 6px; }
+.section-label { font: 400 8.5px/1 "IBM Plex Mono"; color: var(--ink-soft); letter-spacing: .14em; text-transform: uppercase; }
+.section-value { font: 400 12px/1.5 "Helvetica Neue", Helvetica, Arial; }
+
+.action-list { padding: 16px; display: flex; flex-direction: column; gap: 9px; }
+.pill-btn {
+  display: flex; align-items: center; justify-content: space-between; padding: 10px 14px;
+  border: 1px solid var(--ink); border-radius: 100px; cursor: pointer; background: var(--paper);
+  font: 400 9.5px/1 "IBM Plex Mono"; letter-spacing: .12em; text-transform: uppercase; color: var(--ink);
+  transition: background .15s ease;
+}
+.pill-btn:hover { background: var(--paper-outer); }
+.pill-btn:disabled, .pill-btn.disabled { opacity: .4; cursor: default; background: var(--paper); }
+.pill-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ink); flex: none; }
+.pill-btn.dark { background: var(--ink); color: var(--paper); }
+.pill-btn.dark .dot { background: var(--paper); }
+.pill-btn.dark:hover { background: #2b2823; }
+.pill-btn.danger:hover { color: #a33; border-color: #a33; }
+
+#nav { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--ink); font: 400 8.5px/1 "IBM Plex Mono"; color: var(--ink-soft); letter-spacing: .1em; text-transform: uppercase; }
+#nav .nav-btns { display: flex; gap: 4px; }
+#nav button { border: none; background: none; cursor: pointer; color: var(--ink); font: inherit; padding: 4px 6px; }
+#nav button:disabled { opacity: .3; cursor: default; }
+#nav button:hover:not(:disabled) { opacity: .55; }
+
+/* ---------- diagram content, drawn into #card-body ---------- */
+.spectrum-bar-row { display: flex; align-items: center; gap: 8px; margin-bottom: 14px; }
+.spectrum-end { font: 400 8.5px/1 "IBM Plex Mono"; color: var(--ink-soft); letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
+.spectrum-bar { flex: 1; height: 6px; }
+.camp-row { display: grid; gap: 10px; }
+.camp { border-top: 2px solid var(--camp-color, var(--ink)); padding-top: 8px; }
+.camp-label { font: 400 500 11px/1 "IBM Plex Mono"; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 8px; }
+
+.card { border: 1px solid var(--rule-strong); padding: 9px 10px; margin-bottom: 7px; background: var(--paper); position: relative; }
+.card.emph-3 { border-color: var(--ink); }
+.card.emph-1 { opacity: .75; }
+.card.accent-group-a { border-left: 3px solid var(--group-a); }
+.card.accent-group-b { border-left: 3px solid var(--group-b); }
+.card.accent-group-c { border-left: 3px solid var(--group-c); }
+.card.accent-group-d { border-left: 3px solid var(--group-d); }
+.card-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 4px; }
+.card-label { font: 400 11.5px/1.2 "IBM Plex Mono"; font-weight: 500; }
+.card-plain { font: 300 12px/1.4 "Newsreader", Georgia, serif; color: var(--ink-soft); margin: 0; }
+.card-quote { font: italic 300 12px/1.4 "Newsreader", Georgia, serif; margin: 6px 0 0; color: var(--ink); }
+.card-cite { font: 400 9px/1 "IBM Plex Mono"; font-style: normal; color: var(--ink-soft); }
+.card-byline { font: 400 8.5px/1 "IBM Plex Mono"; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); margin-top: 6px; }
+.card.unattributed { border-style: dashed; }
+
+/* hedge badge - stated is the unmarked default, so only the other three show */
+.hedge-badge { font: 400 7px/1 "IBM Plex Mono"; letter-spacing: .06em; text-transform: uppercase; padding: 2px 5px; border-radius: 3px; border: 1px solid var(--ink-soft); color: var(--ink-soft); flex: none; }
+.hedge-badge.hedge-hedged { border-color: var(--accent); color: var(--ink); }
+.hedge-badge.hedge-disputed { border-color: #B4553F; color: #B4553F; }
+.hedge-badge.hedge-negated { border-style: dashed; }
+
+/* off-axis: nodes that reject the framing entirely never get a numeric position */
+.off-axis-bracket { border: 1px dashed var(--ink-soft); border-radius: 6px; padding: 8px 12px; margin-bottom: 14px; }
+.off-axis-label { font: 400 8.5px/1 "IBM Plex Mono"; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); margin-bottom: 6px; }
+.off-axis-nodes { display: flex; flex-wrap: wrap; gap: 6px; }
+.off-axis-chip { font: 300 11.5px/1 "Newsreader", Georgia, serif; font-style: italic; border: 1px solid var(--ink-soft); border-radius: 999px; padding: 3px 10px; }
+
+/* spectrum */
+.spectrum-track { position: relative; flex: 1; height: 28px; }
+.spectrum-track::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; background: var(--rule-strong); transform: translateY(-1px); }
+.spectrum-marker { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.spectrum-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); border: 1.5px solid var(--ink); }
+.spectrum-dot.unattributed { background: none; border-style: dashed; }
+.spectrum-marker-label { font: 400 8px/1.2 "IBM Plex Mono"; text-align: center; max-width: 70px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.comparison-grid { margin-top: 4px; }
+.edge-notes { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.edge-note { font: 300 11.5px/1.4 "Newsreader", Georgia, serif; color: var(--ink-soft); }
+.edge-note b { color: var(--ink); font-weight: 600; }
+
+/* NO_FIGURE - a valid, honest outcome, not an error */
+.no-figure-badge { display: inline-block; font: 400 9px/1 "IBM Plex Mono"; letter-spacing: .12em; text-transform: uppercase; border: 1px solid var(--ink); border-radius: 999px; padding: 4px 10px; }
+.residue-list { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.residue-item { border-left: 2px solid var(--rule-strong); padding-left: 10px; }
+.residue-reason { font: 400 9px/1 "IBM Plex Mono"; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+
+.axis-wrap svg { width: 100%; height: auto; display: block; }
+.axis-tick { font-family: "IBM Plex Mono"; font-size: 9.5px; fill: var(--ink-soft); }
+.node-name, .node-name-sm { font-family: "Newsreader", Georgia, serif; font-size: 11px; fill: var(--ink); }
+.node-name-sm { font-size: 9.5px; }
+.axis-legend { display: flex; flex-wrap: wrap; gap: 10px 16px; margin-top: 10px; font: 400 9.5px/1 "IBM Plex Mono"; color: var(--ink-soft); }
+.axis-legend-item b { color: var(--ink); margin-right: 4px; }
+.edge-label { font-family: "IBM Plex Mono"; font-size: 7.5px; fill: var(--ink-soft); }
+
+/* ---------- empty state ---------- */
+#empty-state { display: flex; flex-direction: column; align-items: center; gap: 14px; text-align: center; padding: 40px; max-width: 340px; }
+#empty-state .ring { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--ink); display: flex; align-items: center; justify-content: center; }
+#empty-state h2 { font: 300 20px/1.2 "Newsreader", Georgia, serif; margin: 0; }
+#empty-state p { font: 400 12px/1.6 "Helvetica Neue", Helvetica, Arial; color: var(--ink-soft); margin: 0; }
+#empty-state code { font-family: "IBM Plex Mono"; background: var(--paper); padding: 2px 6px; border: 1px solid var(--rule); }
+
+::-webkit-scrollbar { width: 7px; height: 7px; }
+::-webkit-scrollbar-thumb { background: rgba(26,24,21,.25); }
+::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+  <div id="titlebar">gist — library</div>
+  <div id="body">
+
+    <div id="panel" style="display:none;">
+      <div id="card-pane">
+        <div id="card">
+          <div id="card-head"><span id="ch-form"></span><span id="ch-basis"></span></div>
+          <div id="card-body"></div>
+          <div id="card-foot"><span id="cf-source"></span><span class="dash"></span></div>
+        </div>
+      </div>
+      <div id="actions">
+        <div class="actions-header"><span>actions</span><span class="close-btn" id="btn-hide">hide</span></div>
+        <div class="section">
+          <span class="section-label">reader's question</span>
+          <span class="section-value" id="act-question"></span>
+        </div>
+        <div class="section">
+          <span class="section-label">captured</span>
+          <span class="section-value" id="act-when"></span>
+        </div>
+        <div class="action-list">
+          <div class="pill-btn" id="btn-regenerate"><span>re-generate</span><span class="dot"></span></div>
+          <div class="pill-btn dark" id="btn-copy"><span id="copy-label">copy png</span><span class="dot"></span></div>
+          <div class="pill-btn" id="btn-download"><span>download png</span><span class="dot"></span></div>
+          <div class="pill-btn danger" id="btn-delete"><span>delete</span><span class="dot"></span></div>
+        </div>
+        <div id="nav">
+          <span id="nav-count">0 of 0</span>
+          <div class="nav-btns">
+            <button id="nav-prev">‹</button>
+            <button id="nav-next">›</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="empty-state">
+      <div class="ring">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#1A1815" stroke-width="1.4"><path d="M12 3v5M12 16v5M3 12h5M16 12h5M6 6l3 3M18 6l-3 3M6 18l3-3M18 18l-3-3"/></svg>
+      </div>
+      <h2>Nothing marked yet</h2>
+      <p>Select a passage anywhere on your Mac, then click the floating icon (or press <code>⌘⇧G</code>) to gist it.</p>
+    </div>
+
+  </div>
+<script src="diagrams.js"></script>
+<script src="modal.js"></script>
+</body>
+</html>

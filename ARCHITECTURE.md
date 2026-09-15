@@ -2,27 +2,27 @@
 
 ## Stack choice
 
-**FastAPI + Pydantic backend, Manifest V3 browser extension (TypeScript,
-esbuild) for the frontend.**
+**FastAPI + Pydantic backend, native macOS app (Electron) for the frontend.**
 
 The backend's only job is producing a validated, schema-shaped explanation of
-a passage — no rendering, no styling, no images. The extension's only job is
-capturing a selection and drawing the diagram from that schema. Keeping them
-as separate processes (HTTP between them, not a shared runtime) means the
-rendering logic could be swapped for a different capture surface entirely
-without touching the backend at all.
+a passage — no rendering, no styling, no images. The app's only job is
+capturing a selection (system-wide, over any other app) and drawing the
+diagram from that schema. Keeping them as separate processes (HTTP between
+them, not a shared runtime) means the rendering logic could be swapped for a
+different capture surface entirely without touching the backend at all.
 
 ## Why no image generation
 
 Every mark on a card is drawn from a structured field in `ExplainResponse`
-(a node's `emphasis` sets its weight, `evidentiality`/`basis` sets the
-stated-vs-inferred ink mark), never from an image model asked to "draw a
-diagram." This is a deliberate, load-bearing choice: an image model has no
-way to guarantee a claim it draws is actually in the source passage, while
-every node/edge/glossary term here carries a `source_span` that's checked
-against the literal passage text (see "Span verification" below). Fidelity
-to the source is the entire value proposition; a generated image would trade
-that for a nicer-looking result that might be wrong.
+(a node's `emphasis` sets its weight, whether it still carries a `quote`
+after span verification sets the verified-vs-unattributed ink mark), never
+from an image model asked to "draw a diagram." This is a deliberate,
+load-bearing choice: an image model has no way to guarantee a claim it draws
+is actually in the source passage, while every node/edge/glossary term here
+carries a `source_span` that's checked against the literal passage text (see
+"Span verification" below). Fidelity to the source is the entire value
+proposition; a generated image would trade that for a nicer-looking result
+that might be wrong.
 
 ## Pipeline (`gist-backend`)
 
@@ -82,19 +82,19 @@ with zero network access.
 | Span verification | `gist-backend/app/verify.py` | Deterministic exact/repaired/dropped classification against the literal passage |
 | Cache | `gist-backend/app/cache.py` | SQLite (`cache.db`), keyed by passage+mode+schema+model hash |
 | Schema | `gist-backend/app/schema.py` | Pydantic models for `ExplainRequest`/`ExplainResponse` |
-| Floating icon + picker | `gist-extension/src/content.ts` | Runs in the page's own origin; selection UI |
-| Backend client | `gist-extension/src/background.ts` | Service worker; the only piece that calls the backend (content scripts would be blocked by CORS calling it directly — the extension's `host_permissions` cover this instead) |
-| On-device library | `gist-extension/src/storage.ts` | `chrome.storage.local`, most-recent 60 results |
-| Diagram renderer | `gist-extension/src/render.ts` | Draws all five forms (spectrum, comparison, concept map, process, axis) from `ExplainResponse` fields only |
+| Selection capture | `gist/lib/selection.js` | System-wide "grab whatever's selected" via a simulated Cmd+C plus clipboard read, over any app |
+| Backend client | `gist/lib/backend.js` | Spawns/reuses a local `gist-backend`, or talks to a hosted one; the only piece that calls the backend |
+| On-device library | `gist/lib/library.js` | Per-capture JSON files under Electron's userData dir |
+| Diagram renderer | `gist/renderer/diagrams.js` | Draws all five `layout_hint` values (comparison_table, flow, timeline, hierarchy, quadrant) from `ExplainResponse` fields only |
 
 Each module only talks to the next one through the interfaces above — the
-extension never touches the LLM or the cache directly, only `POST
-/v1/explain`; the pipeline never knows whether the caller is the extension,
-the test page, or `scripts/try_explain.py`.
+app never touches the LLM or the cache directly, only `POST /v1/explain`;
+the pipeline never knows whether the caller is the app, the test page, or
+`scripts/try_explain.py`.
 
 ## Non-goals
 
-No PDF parsing, no auth, no real frontend styling beyond the extension's own
-CSS, no streaming, no whole-paper analysis, no other LLM providers, no
-deployment tooling beyond what's needed to point the extension at a hosted
-backend URL. All scoped out deliberately, not by oversight.
+No PDF parsing, no auth, no real frontend styling beyond the app's own CSS,
+no streaming, no whole-paper analysis, no other LLM providers, no browser
+extension, no deployment tooling beyond what's needed to point the app at a
+hosted backend URL. All scoped out deliberately, not by oversight.

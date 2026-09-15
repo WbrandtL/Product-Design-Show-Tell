@@ -1,10 +1,10 @@
 # Gist
 
-Select a passage of dense text on any page, and get back a verified reading
-diagram — concepts, typed relations, plain-language glosses for jargon, and a
-one-sentence takeaway — drawn from a structured object, never a generated
-image. Every mark on the card is anchored to a character span in the original
-passage; nothing is hand-waved by an LLM's drawing.
+Select a passage of dense text anywhere on your Mac, and get back a verified
+reading diagram — concepts, typed relations, plain-language glosses for
+jargon, and a one-sentence takeaway — drawn from a structured object, never a
+generated image. Every mark on the card is anchored to a character span in
+the original passage; nothing is hand-waved by an LLM's drawing.
 
 See [ARCHITECTURE.md](./ARCHITECTURE.md) for the pipeline, the schema, and
 the reasoning behind the "no generated images" stance.
@@ -13,14 +13,8 @@ the reasoning behind the "no generated images" stance.
 
 ```
 gist-backend/    FastAPI service: LLM extraction, span verification, cache, fixture fallback
-gist-extension/  Manifest V3 browser extension: floating icon, on-device library, diagram renderer
+gist/            Native macOS app (Electron): floating icon, on-device library, diagram renderer
 ```
-
-`gist-extension` is preconfigured to call a hosted `gist-backend` instance at
-`https://designtask1.onrender.com` — load `gist-extension/dist/` as an
-unpacked extension (`chrome://extensions` → Developer mode → Load unpacked)
-and it works with no local setup at all. The steps below are only for
-running/modifying the backend yourself.
 
 ## Setup — backend
 
@@ -29,14 +23,29 @@ cd gist-backend
 python3.11 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 cp .env.example .env
-# edit .env: set GROQ_API_KEY (free at console.groq.com), or leave LLM_PROVIDER=mock
+# edit .env: set GROQ_API_KEY (free at console.groq.com), or leave it blank for fixture mode
 .venv/bin/uvicorn app.main:app --reload --port 8000
 ```
 
 Open http://localhost:8000/ for a plain test page, http://localhost:8000/docs
 for interactive Swagger, or http://localhost:8000/healthz to check status. With
 no API key (or on a Groq failure/timeout), it serves a pre-baked fixture
-response instead — the test page and extension both work fully offline.
+response instead — the test page and the app both work fully offline.
+
+## Setup — app
+
+```bash
+cd gist
+npm install
+npm start
+```
+
+On first launch, grant **Accessibility** permission to whatever process is
+running it — your terminal, since Electron runs as its child in dev mode —
+in **System Settings → Privacy & Security → Accessibility**. See
+[gist/README.md](./gist/README.md) for why this is required and how the
+packaged `.app` build differs. In dev mode the app spawns/reuses a local
+`gist-backend` on port 8731 automatically.
 
 ## API
 
@@ -51,6 +60,6 @@ Passages must be 200–4000 characters; anything outside that returns 422.
 ## Non-goals
 
 No PDF parsing, no auth, no streaming, no whole-paper analysis, no other LLM
-providers, no image generation (SVG/Mermaid/HTML diagrams are drawn from the
-schema by the frontend renderer, never by an image model) — see
+providers, no browser extension, no image generation (SVG diagrams are drawn
+from the schema by the app's renderer, never by an image model) — see
 ARCHITECTURE.md for why.
