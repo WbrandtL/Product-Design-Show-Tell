@@ -1,166 +1,169 @@
-"""
-FastAPI application entrypoint for the reading-tool backend.
+"""FastAPI app: the /api/* routes plus the static test page. One process serves
+both, so there is no CORS setup and no second dev server.
 """
 
 import os
-import time
+from pathlib import Path
+from uuid import uuid4
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-
-from app.cache import count_cache_entries, init_db
-from app.pipeline import run_explain_pipeline
-from app.samples import SAMPLE_PASSAGES
-from app.schema import ExplainRequest, ExplainResponse, RelayoutRequest
+from pydantic import BaseModel, ValidationError
 
 load_dotenv()
 
+from app import cache, llm, verify  # noqa: E402  (after load_dotenv so env vars are set)
+from app.schema import ExplainResponse  # noqa: E402
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+SAMPLES_DIR = BASE_DIR / "samples"
+STATIC_DIR = BASE_DIR / "static"
+
+MIN_PASSAGE_CHARS = 200
+MAX_PASSAGE_CHARS = 8000
+
+SAMPLE_MANIFEST = [
+    {"id": "agency", "title": "Agency and structure in critical theory (Appendix A)", "file": "agency.txt"},
+    {"id": "permafrost_feedback", "title": "The permafrost carbon feedback loop", "file": "permafrost_feedback.txt"},
+    {"id": "trust_definitions", "title": "Three competing definitions of trust", "file": "trust_definitions.txt"},
+]
+
 app = FastAPI(title="Reading Tool Backend")
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
-MIN_PASSAGE_LEN = 200
-MAX_PASSAGE_LEN = 4000
+class ExplainRequest(BaseModel):
+    """The body of a POST /api/explain call."""
+
+    passage: str
+    context: str | None = None
+    force: bool = False
+    provider: str | None = None
 
 
-@app.get("/")
-def serve_index():
-    '''
-    Serves the static test page
+@app.get("/api/health")
+def health() -> dict:
+    """
+    Reports service status, the active provider/model and the cache size.
     Parameters:
         (none)
     Returns:
-        response (FileResponse): The index.html file from app/static
-    '''
-    return FileResponse(os.path.join(STATIC_DIR, "index.html"))
+        status (dict): {status, provider, model, cache_entries}
+    """
+    provider = llm.resolve_provider()
+    if provider == "groq":
+        model = os.environ.get("GROQ_MODEL") or "(GROQ_MODEL unset)"
+    else:
+        model = "mock"
+    return {"status": "ok", "provider": provider, "model": model, "cache_entries": cache.count()}
 
 
-@app.get("/healthz")
-def healthz():
-    '''
-    Reports service health, configured model, and cache size
+@app.get("/api/samples")
+def get_samples() -> list[dict]:
+    """
+    Lists the built-in sample passages.
     Parameters:
         (none)
     Returns:
-        status (dict): status, model, has_api_key, and cache_entries fields
-    '''
-    return {
-        "status": "ok",
-        "model": os.environ.get("GROQ_MODEL", "moonshotai/kimi-k2-instruct"),
-        "has_api_key": bool(os.environ.get("GROQ_API_KEY")),
-        "cache_entries": count_cache_entries(),
+        samples (list[dict]): [{id, title, passage}, ...] for each built-in sample
+    """
+    out = []
+    for entry in SAMPLE_MANIFEST:
+        path = SAMPLES_DIR / entry["file"]
+        text = path.read_text(encoding="utf-8").strip()
+        out.append({"id": entry["id"], "title": entry["title"], "passage": text})
+    return out
+
+
+@app.post("/api/explain", response_model=ExplainResponse)
+async def explain(req: ExplainRequest) -> ExplainResponse:
+    """
+    Turns a submitted passage into a validated, span-verified ExplainResponse,
+    serving from cache when possible.
+    Parameters:
+        req (ExplainRequest): {passage, context?, force?}
+    Returns:
+        response (ExplainResponse): The structured diagram data
+    """
+    passage = req.passage
+    length_warning: str | None = None
+
+    if len(passage) < MIN_PASSAGE_CHARS:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"Passage is too short ({len(passage)} characters, minimum "
+                f"{MIN_PASSAGE_CHARS}) - a single sentence has no structure to map."
+            ),
+        )
+    if len(passage) > MAX_PASSAGE_CHARS:
+        passage = passage[:MAX_PASSAGE_CHARS]
+        length_warning = (
+            f"Passage exceeded {MAX_PASSAGE_CHARS} characters and was truncated before extraction."
+        )
+
+    provider = req.provider or llm.resolve_provider()
+    cache_model = os.environ.get("GROQ_MODEL", "") if provider == "groq" else "mock"
+    key = cache.make_key(passage, req.context, f"{provider}:{cache_model}")
+
+    if not req.force:
+        cached = cache.read(key)
+        if cached is not None:
+            cached = dict(cached)
+            cached["meta"] = {**cached["meta"], "cached": True, "latency_ms": 0}
+            return ExplainResponse.model_validate(cached)
+
+    try:
+        payload, meta = await llm.extract(passage, req.context, provider)
+    except llm.RateLimitError as e:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Groq rate limit hit; retry after {e.retry_after or 'a few'} seconds.",
+            headers={"Retry-After": e.retry_after} if e.retry_after else None,
+        )
+    except llm.ProviderUnavailableError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except llm.ExtractionError as e:
+        llm.log_run(
+            passage=passage, context=req.context,
+            meta={"provider": provider, "model": cache_model, "prompt": e.prompt,
+                  "raw_response": e.raw_response, "latency_ms": 0, "repair_attempted": e.repair_attempted},
+            payload=None, warnings=[], error=e.errors,
+        )
+        raise HTTPException(status_code=422, detail=e.errors)
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+    full = {
+        **payload,
+        "passage_id": str(uuid4()),
+        "meta": {
+            "model": meta["model"],
+            "provider": meta["provider"],
+            "latency_ms": meta["latency_ms"],
+            "passage_hash": key,
+            "cached": False,
+            "warnings": [],
+            "repair_attempted": meta["repair_attempted"],
+        },
     }
+    try:
+        response = ExplainResponse.model_validate(full)
+    except ValidationError as e:
+        llm.log_run(passage=passage, context=req.context, meta=meta, payload=payload,
+                    warnings=[], error=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
 
+    warnings = verify.verify_response(response, passage)
+    if length_warning:
+        warnings.append(length_warning)
+    response.meta.warnings = warnings
 
-@app.get("/v1/samples")
-def get_samples():
-    '''
-    Returns the built-in sample passages for the test page
-    Parameters:
-        (none)
-    Returns:
-        samples (list[dict]): List of sample passage objects with id, title, and text
-    '''
-    return SAMPLE_PASSAGES
+    cache.write(key, response.model_dump(mode="json"))
+    llm.log_run(passage=passage, context=req.context, meta=meta,
+                payload=response.model_dump(mode="json"), warnings=warnings, error=None)
 
-
-@app.post("/v1/explain", response_model=ExplainResponse)
-def post_explain(req: ExplainRequest):
-    '''
-    Runs the full explanation pipeline on a passage and returns the structured result
-    Parameters:
-        req (ExplainRequest): The passage, optional context, and mode
-    Returns:
-        response (ExplainResponse): The validated, span-verified explanation object
-    Raises:
-        HTTPException: 422 if the passage length is out of bounds, 502 if the LLM
-            output fails validation twice
-    '''
-    passage_len = len(req.passage)
-    if passage_len < MIN_PASSAGE_LEN:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Passage is too short ({passage_len} characters). "
-            f"Select at least {MIN_PASSAGE_LEN} characters.",
-        )
-    if passage_len > MAX_PASSAGE_LEN:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Passage is too long ({passage_len} characters). "
-            f"Select at most {MAX_PASSAGE_LEN} characters.",
-        )
-    start = time.time()
-    response = run_explain_pipeline(req.passage, req.mode, req.context)
-    elapsed_ms = int((time.time() - start) * 1000)
-    if not response.meta.cached:
-        response.meta.latency_ms = elapsed_ms
     return response
 
 
-@app.get("/v1/explain/{explain_id}", response_model=ExplainResponse)
-def get_explain(explain_id: str):
-    '''
-    Retrieves a previously computed explanation by id
-    Parameters:
-        explain_id (str): The uuid of a previously computed ExplainResponse
-    Returns:
-        response (ExplainResponse): The cached explanation object
-    Raises:
-        HTTPException: 404 if no cached response has this id
-    '''
-    response = get_cached_by_id(explain_id)
-    if response is None:
-        raise HTTPException(status_code=404, detail=f"No explanation found with id {explain_id}")
-    return response
-
-
-@app.post("/v1/explain/{explain_id}/relayout", response_model=ExplainResponse)
-def post_relayout(explain_id: str, req: RelayoutRequest):
-    '''
-    Changes the layout_hint of a cached explanation without calling the LLM
-    Parameters:
-        explain_id (str): The uuid of a previously computed ExplainResponse
-        req (RelayoutRequest): The new layout_hint to apply
-    Returns:
-        response (ExplainResponse): The same object with an updated layout_hint
-    Raises:
-        HTTPException: 404 if no cached response has this id
-    '''
-    response = get_cached_by_id(explain_id)
-    if response is None:
-        raise HTTPException(status_code=404, detail=f"No explanation found with id {explain_id}")
-    response.layout_hint = req.layout_hint
-    from app.cache import store_response
-
-    store_response(_relayout_cache_key(explain_id), response)
-    return response
-
-
-def get_cached_by_id(explain_id: str) -> ExplainResponse | None:
-    '''
-    Looks up a cached ExplainResponse by its id field, scanning cache values
-    Parameters:
-        explain_id (str): The uuid to search for
-    Returns:
-        response (ExplainResponse | None): The matching response, or None if not found
-    '''
-    from app.cache import find_by_response_id
-
-    return find_by_response_id(explain_id)
-
-
-def _relayout_cache_key(explain_id: str) -> str:
-    '''
-    Builds the cache key under which a relayouted response is stored
-    Parameters:
-        explain_id (str): The uuid of the explanation being relayouted
-    Returns:
-        key (str): A cache key derived from the explanation id
-    '''
-    return f"relayout:{explain_id}"
-
-
-init_db()
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

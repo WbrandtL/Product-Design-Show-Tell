@@ -1,0 +1,310 @@
+"use strict";
+
+const { app, ipcMain, clipboard, globalShortcut, Menu, dialog, Notification } = require("electron");
+const http = require("http");
+const https = require("https");
+const fs = require("fs");
+
+const backend = require("./lib/backend");
+const library = require("./lib/library");
+const { captureSelection, getFrontmostAppName } = require("./lib/selection");
+const { createWidgetWindow, createModalWindow } = require("./lib/windows");
+
+const CAPTURE_SHORTCUT = "CommandOrControl+Shift+G";
+
+// Last line of defense: an unhandled rejection anywhere must never leave the
+// widget stuck in its busy state with no way to recover short of a restart.
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled rejection:", err);
+  if (widgetWin) {
+    sending = false;
+    widgetWin.webContents.send("capture-error", `Unexpected error: ${err && err.message ? err.message : err}`);
+  }
+});
+const REQUEST_TIMEOUT_MS = 40000;
+// Minimum gap between backend sends, so a burst of clicks/hotkeys doesn't
+// fire concurrent requests - see the queue below.
+const MIN_SEND_SPACING_MS = 3000;
+
+let widgetWin = null;
+let modalWin = null;
+let backendBaseUrl = null;
+let backendReadyPromise = Promise.resolve();
+
+/**
+ * Sleeps for the given number of milliseconds.
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Makes a JSON POST request against the local reading-backend. Never hangs
+ * indefinitely - rejects on timeout so a stuck request can't leave the
+ * widget spinning forever.
+ * @param {string} pathName the request path, e.g. "/api/explain"
+ * @param {object} body the JSON body to send
+ * @param {number} [timeoutMs]
+ * @returns {Promise<{status: number, json: object}>}
+ */
+function postJson(pathName, body, timeoutMs = REQUEST_TIMEOUT_MS) {
+  return new Promise((resolve, reject) => {
+    const data = Buffer.from(JSON.stringify(body), "utf-8");
+    const client = backendBaseUrl.startsWith("https:") ? https : http;
+    const req = client.request(
+      `${backendBaseUrl}${pathName}`,
+      { method: "POST", headers: { "Content-Type": "application/json", "Content-Length": data.length } },
+      (res) => {
+        let raw = "";
+        res.on("data", (chunk) => (raw += chunk));
+        res.on("end", () => {
+          try {
+            resolve({ status: res.statusCode, json: JSON.parse(raw) });
+          } catch (e) {
+            resolve({ status: res.statusCode, json: { detail: raw || "Empty response from backend." } });
+          }
+        });
+      }
+    );
+    req.setTimeout(timeoutMs, () => req.destroy(new Error(`Timed out after ${timeoutMs}ms`)));
+    req.on("error", reject);
+    req.write(data);
+    req.end();
+  });
+}
+
+// --- Selection grabbing is serialized (clipboard save/restore would race if
+// two captures overlapped); sending to the backend is queued separately with
+// spacing, so a burst of captures doesn't fire concurrent Groq calls. ---
+let selectionLock = Promise.resolve();
+function grabSelectionSerialized(targetAppName) {
+  const p = selectionLock.then(() => captureSelection(clipboard, targetAppName));
+  selectionLock = p.then(() => {}, () => {});
+  return p;
+}
+
+const sendQueue = []; // { text }
+let sending = false;
+let lastSendAt = 0;
+
+/**
+ * Pushes the widget's current busy/queued state to the renderer.
+ * @returns {void}
+ */
+function pushState() {
+  if (!widgetWin) return;
+  widgetWin.webContents.send(sending || sendQueue.length ? "capture-started" : "capture-finished-idle");
+  widgetWin.webContents.send("queue-size", sendQueue.length);
+}
+
+/**
+ * Drains the send queue one item at a time, with a minimum spacing between
+ * requests and 429-aware backoff (a rate-limited item is re-queued and
+ * retried after the server's Retry-After, rather than dropped).
+ * @returns {Promise<void>}
+ */
+async function processQueue() {
+  if (sending || sendQueue.length === 0) return;
+  sending = true;
+  pushState();
+
+  const wait = Math.max(0, MIN_SEND_SPACING_MS - (Date.now() - lastSendAt));
+  if (wait > 0) await sleep(wait);
+
+  const { text } = sendQueue.shift();
+  lastSendAt = Date.now();
+
+  let record = null;
+  let retryAfterMs = null;
+  try {
+    try {
+      const { status, json } = await postJson("/api/explain", { passage: text });
+      if (status === 200) {
+        record = library.save({ passage: text, response: json, error: null });
+      } else if (status === 429) {
+        const m = /retry after (\d+)/i.exec(typeof json.detail === "string" ? json.detail : "");
+        retryAfterMs = (m ? parseInt(m[1], 10) : 15) * 1000;
+        sendQueue.unshift({ text }); // put it back at the front, try again after the wait
+      } else {
+        const detail = typeof json.detail === "string" ? json.detail : JSON.stringify(json.detail);
+        record = library.save({ passage: text, response: null, error: detail, httpStatus: status });
+      }
+    } catch (err) {
+      record = library.save({ passage: text, response: null, error: `Couldn't reach the backend: ${err.message}`, httpStatus: null });
+    }
+
+    if (record) {
+      if (widgetWin) widgetWin.webContents.send("badge", library.unseenCount());
+      if (modalWin) modalWin.webContents.send("library-changed");
+      const hasFigure = record.response && record.response.figures && record.response.figures.length > 0;
+      const notif = hasFigure
+        ? new Notification({ title: record.response.figures[0].verbal_summary, body: "Click the floating icon to view it." })
+        : record.response
+        ? new Notification({ title: "Nothing worth drawing here", body: "This selection didn't need a figure — click the icon to see why." })
+        : new Notification({ title: "Couldn't diagram that selection", body: record.error });
+      notif.on("click", openLibrary);
+      notif.show();
+    }
+  } catch (err) {
+    // Defense in depth: nothing above this point should be able to throw
+    // past this, but if it somehow does, the queue still has to recover.
+    console.error("processQueue item failed unexpectedly:", err);
+  } finally {
+    sending = false;
+    pushState();
+  }
+
+  if (retryAfterMs) {
+    await sleep(retryAfterMs);
+  }
+  if (sendQueue.length) processQueue();
+}
+
+/**
+ * Runs one capture: grabs the current selection and enqueues it for sending.
+ * Safe to call in rapid succession - captures queue rather than racing.
+ * @returns {Promise<void>}
+ */
+async function runCapture() {
+  if (!widgetWin) return;
+  await backendReadyPromise;
+  try {
+    // Snapshot which app to target as early as possible - by the time this
+    // runs, a click on our own icon (if that's what triggered us) is already
+    // done, so this reliably reflects the app the user meant to copy from.
+    const targetAppName = await getFrontmostAppName();
+    const { text, error: selectionError } = await grabSelectionSerialized(targetAppName);
+    if (selectionError) {
+      widgetWin.webContents.send("capture-error", selectionError);
+      new Notification({ title: "Gist", body: selectionError, silent: true }).show();
+      return;
+    }
+    sendQueue.push({ text });
+    pushState();
+    processQueue();
+  } catch (err) {
+    // Whatever else could go wrong here, the widget must never end up stuck
+    // spinning with no way out short of a restart.
+    console.error("runCapture failed unexpectedly:", err);
+    widgetWin.webContents.send("capture-error", `Unexpected error: ${err.message || err}`);
+  }
+}
+
+/**
+ * Shows the library/modal window, marking every stored record as seen.
+ * @returns {void}
+ */
+function openLibrary() {
+  library.markAllSeen();
+  if (widgetWin) widgetWin.webContents.send("badge", 0);
+  if (modalWin) {
+    modalWin.webContents.send("library-changed");
+    modalWin.show();
+    modalWin.focus();
+  }
+}
+
+/**
+ * Builds and shows the widget's right-click context menu.
+ * @returns {void}
+ */
+function showWidgetContextMenu() {
+  const menu = Menu.buildFromTemplate([
+    { label: "Open Library", click: openLibrary },
+    { label: "Capture Selection Now", accelerator: CAPTURE_SHORTCUT, click: runCapture },
+    { type: "separator" },
+    { label: "Quit Gist", role: "quit" },
+  ]);
+  menu.popup();
+}
+
+app.whenReady().then(async () => {
+  if (process.platform === "darwin") app.dock.hide();
+
+  library.init(app.getPath("userData"));
+
+  // Registered before the windows are created so the modal's own on-load
+  // fetch can never race ahead of handler registration.
+  ipcMain.on("widget-click", runCapture);
+  ipcMain.on("widget-context-menu", showWidgetContextMenu);
+  ipcMain.on("open-library", openLibrary);
+  ipcMain.handle("get-library", () => library.list());
+  ipcMain.handle("delete-graphic", (_e, id) => library.remove(id));
+  ipcMain.handle("get-backend-status", () => backend.isAlive(backendBaseUrl || undefined));
+
+  ipcMain.handle("regenerate", async (_e, id) => {
+    const rec = library.list().find((r) => r.id === id);
+    if (!rec) return null;
+    await backendReadyPromise;
+    try {
+      const { status: httpStatus, json } = await postJson("/api/explain", { passage: rec.passage, force: true });
+      if (httpStatus === 200) {
+        return library.update(id, { response: json, error: null, httpStatus: 200 });
+      }
+      const detail = typeof json.detail === "string" ? json.detail : JSON.stringify(json.detail);
+      return library.update(id, { response: null, error: detail, httpStatus });
+    } catch (err) {
+      return library.update(id, { response: null, error: `Couldn't reach the backend: ${err.message}`, httpStatus: null });
+    }
+  });
+
+  ipcMain.handle("export-card-image", async (_e, { rect, mode }) => {
+    if (!modalWin) return { ok: false, error: "No window to capture." };
+    const image = await modalWin.webContents.capturePage(rect);
+    if (mode === "copy") {
+      await clipboard.writeImage(image);
+      return { ok: true };
+    }
+    const { canceled, filePath } = await dialog.showSaveDialog(modalWin, {
+      defaultPath: `reading-graphic-${Date.now()}.png`,
+      filters: [{ name: "PNG Image", extensions: ["png"] }],
+    });
+    if (canceled || !filePath) return { ok: false, error: null };
+    fs.writeFileSync(filePath, image.toPNG());
+    return { ok: true, filePath };
+  });
+
+  widgetWin = createWidgetWindow();
+  modalWin = createModalWindow();
+
+  // The page's own IPC listeners aren't registered until it finishes loading,
+  // so a send() fired right after createWidgetWindow() can arrive before
+  // anyone is listening and get silently dropped. Track the state here and
+  // replay it once the page is actually ready, the same way badge count is.
+  let backendState = "waking";
+  widgetWin.webContents.once("did-finish-load", () => {
+    widgetWin.webContents.send("badge", library.unseenCount());
+    if (backendState === "ready") widgetWin.webContents.send("backend-ready");
+    else if (backendState === "waking") widgetWin.webContents.send("backend-waking");
+    // an "error" state was already delivered via capture-error when it happened
+  });
+
+  // The icon must appear immediately - a reviewer double-clicking the app
+  // should see it launch right away, not stare at nothing for up to 45s
+  // while a cold-started hosted backend wakes up. So the backend check runs
+  // after the windows exist, not before, with its own "waking up" indicator;
+  // runCapture()/regenerate() await this same promise instead of racing it.
+  backendReadyPromise = (async () => {
+    const status = await backend.ensureBackend();
+    backendBaseUrl = status.baseUrl;
+    if (status.error) {
+      backendState = "error";
+      if (widgetWin) widgetWin.webContents.send("capture-error", status.error);
+    } else {
+      backendState = "ready";
+      if (widgetWin) widgetWin.webContents.send("backend-ready");
+    }
+    return status;
+  })();
+
+  globalShortcut.register(CAPTURE_SHORTCUT, runCapture);
+});
+
+app.on("window-all-closed", (e) => e.preventDefault());
+
+app.on("before-quit", () => {
+  globalShortcut.unregisterAll();
+  backend.stopBackend();
+});

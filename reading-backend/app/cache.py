@@ -1,126 +1,65 @@
-"""
-SQLite-backed cache for ExplainResponse objects.
+"""Disk cache for explain responses: one JSON file per (passage, context, model)
+combination under cache/. No database - iterating on the renderer against a real
+payload should not cost an API call every time.
 """
 
 import hashlib
-import os
-import sqlite3
-from datetime import datetime, timezone
-from typing import Optional
+import json
+from pathlib import Path
 
-from app.schema import ExplainResponse
-
-DB_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "cache.db")
+CACHE_DIR = Path(__file__).resolve().parent.parent / "cache"
 
 
-def _connect() -> sqlite3.Connection:
-    '''
-    Opens a connection to the SQLite cache database
+def make_key(passage: str, context: str | None, model: str) -> str:
+    """
+    Builds the cache key for one explain call.
     Parameters:
-        (none)
+        passage (str): The submitted passage
+        context (str | None): Optional surrounding context
+        model (str): The model identifier used for extraction
     Returns:
-        conn (sqlite3.Connection): An open connection to cache.db
-    '''
-    return sqlite3.connect(DB_PATH)
-
-
-def init_db() -> None:
-    '''
-    Creates the cache table if it does not already exist
-    Parameters:
-        (none)
-    Returns:
-        None
-    '''
-    conn = _connect()
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS cache ("
-        "key TEXT PRIMARY KEY, "
-        "response_json TEXT, "
-        "created_at TEXT)"
-    )
-    conn.commit()
-    conn.close()
-
-
-def make_cache_key(passage: str, mode: str, schema_version: str, model: str) -> str:
-    '''
-    Builds the deterministic cache key for a given request
-    Parameters:
-        passage (str): The passage text
-        mode (str): The requested mode
-        schema_version (str): The schema version string
-        model (str): The model name used for extraction
-    Returns:
-        key (str): A sha256 hex digest identifying this request
-    '''
-    raw = f"{passage}|{mode}|{schema_version}|{model}"
+        key (str): A sha256 hex digest identifying this (passage, context, model) triple
+    """
+    raw = f"{passage}\x1f{context or ''}\x1f{model}"
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def get_cached(key: str) -> Optional[ExplainResponse]:
-    '''
-    Looks up a cached response by its content-hash key
+def read(key: str) -> dict | None:
+    """
+    Reads a cached response by key.
     Parameters:
-        key (str): The cache key from make_cache_key
+        key (str): The cache key from make_key
     Returns:
-        response (ExplainResponse | None): The cached response, or None if not present
-    '''
-    conn = _connect()
-    row = conn.execute(
-        "SELECT response_json FROM cache WHERE key = ?", (key,)
-    ).fetchone()
-    conn.close()
-    if row is None:
+        data (dict | None): The cached response dict, or None on a cache miss
+    """
+    path = CACHE_DIR / f"{key}.json"
+    if not path.exists():
         return None
-    return ExplainResponse.model_validate_json(row[0])
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def store_response(key: str, response: ExplainResponse) -> None:
-    '''
-    Stores or overwrites a response under the given cache key
+def write(key: str, data: dict) -> None:
+    """
+    Writes a response to the cache.
     Parameters:
-        key (str): The cache key to store under
-        response (ExplainResponse): The response object to serialize and store
+        key (str): The cache key from make_key
+        data (dict): The full, validated response to persist
     Returns:
-        None
-    '''
-    conn = _connect()
-    conn.execute(
-        "INSERT OR REPLACE INTO cache (key, response_json, created_at) VALUES (?, ?, ?)",
-        (key, response.model_dump_json(), datetime.now(timezone.utc).isoformat()),
-    )
-    conn.commit()
-    conn.close()
+        (none)
+    """
+    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = CACHE_DIR / f"{key}.json"
+    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
 
-def find_by_response_id(explain_id: str) -> Optional[ExplainResponse]:
-    '''
-    Scans the cache for a response whose id field matches the given uuid
-    Parameters:
-        explain_id (str): The uuid to search for
-    Returns:
-        response (ExplainResponse | None): The matching response, or None if not found
-    '''
-    conn = _connect()
-    rows = conn.execute("SELECT response_json FROM cache").fetchall()
-    conn.close()
-    for (response_json,) in rows:
-        response = ExplainResponse.model_validate_json(response_json)
-        if response.id == explain_id:
-            return response
-    return None
-
-
-def count_cache_entries() -> int:
-    '''
-    Counts the number of entries currently stored in the cache
+def count() -> int:
+    """
+    Counts entries currently in the cache.
     Parameters:
         (none)
     Returns:
-        count (int): The number of rows in the cache table
-    '''
-    conn = _connect()
-    row = conn.execute("SELECT COUNT(*) FROM cache").fetchone()
-    conn.close()
-    return row[0]
+        n (int): Number of cached response files on disk
+    """
+    if not CACHE_DIR.exists():
+        return 0
+    return sum(1 for _ in CACHE_DIR.glob("*.json"))

@@ -1,98 +1,167 @@
-"""
-Deterministic span verification for ExplainResponse objects.
+"""Deterministic anti-hallucination pass. Runs after schema validation and
+before a response is cached or returned.
 
-For every source_span/quote pair, this module confirms the quote actually
-occurs in the passage at the claimed offsets, repairs the offsets when the
-quote is found exactly once elsewhere, and otherwise degrades the element
-(demoting emphasis, marking edges inferred, or dropping glossary terms)
-rather than trusting an unverifiable span.
+This schema (PROMPT_SPEC.md) gives most spans as bare [start, end] offsets
+with no accompanying verbatim text to check them against - unlike the one
+place a real quote/offset pair exists (figures[].quotes[]), where the same
+search-and-correct technique as before applies. Everywhere else, the honest
+version of "verification" is bounds-checking: an offset pair outside the
+passage's own length is definitely wrong and is dropped; anything else can't
+be mechanically confirmed as non-hallucinated without a text to compare
+against, which is a real, documented limit of this contract (see README).
 """
+
+import re
 
 from app.schema import ExplainResponse
 
+_HYPHENS = "-‐‑‒"
+_SINGLE_QUOTES = "'‘’"
+_DOUBLE_QUOTES = '"“”'
 
-def verify_span(passage: str, span, quote: str) -> tuple[str, tuple[int, int] | None]:
-    '''
-    Checks one span/quote pair against the passage and classifies the outcome
+
+def _flexible_pattern(quote: str) -> str:
+    """
+    Builds a regex matching `quote` against the passage while tolerating
+    whitespace runs and common typographic punctuation substitutions (a
+    model-written non-breaking hyphen standing in for the passage's plain one).
     Parameters:
-        passage (str): The exact passage string the response was generated from
-        span (tuple[int, int] | None): The claimed [start, end] character offsets
-        quote (str | None): The exact substring the span is supposed to point to
+        quote (str): The candidate verbatim quote from the model
     Returns:
-        result (tuple[str, tuple[int, int] | None]): A status of "verified",
-            "repaired", or "dropped", paired with the offsets to use (or None
-            if dropped)
-    '''
-    if not quote:
-        return "dropped", None
-    if span is not None:
-        start, end = span
-        if 0 <= start <= end <= len(passage) and passage[start:end] == quote:
-            return "verified", (start, end)
-    first = passage.find(quote)
-    if first != -1 and passage.find(quote, first + 1) == -1:
-        return "repaired", (first, first + len(quote))
-    return "dropped", None
-
-
-def verify_response(passage: str, response: ExplainResponse) -> ExplainResponse:
-    '''
-    Runs span verification over every node, edge, and glossary term in a response
-    Parameters:
-        passage (str): The exact passage string the response was generated from
-        response (ExplainResponse): The parsed, schema-valid response to verify
-    Returns:
-        response (ExplainResponse): The same response with spans corrected or
-            degraded in place, and meta span counts updated
-    '''
-    verified = repaired = dropped = 0
-
-    for node in response.nodes:
-        status, new_span = verify_span(passage, node.source_span, node.quote)
-        if status == "verified":
-            verified += 1
-            node.source_span = new_span
-        elif status == "repaired":
-            repaired += 1
-            node.source_span = new_span
-        else:
-            dropped += 1
-            node.source_span = None
-            node.quote = None
-            node.emphasis = 3
-
-    for edge in response.edges:
-        if edge.evidentiality != "stated":
+        pattern (str): A regex source string to search the passage with
+    """
+    out: list[str] = []
+    i, n = 0, len(quote)
+    while i < n:
+        ch = quote[i]
+        if ch.isspace():
+            j = i
+            while j < n and quote[j].isspace():
+                j += 1
+            out.append(r"\s+")
+            i = j
             continue
-        status, new_span = verify_span(passage, edge.source_span, edge.quote)
-        if status == "verified":
-            verified += 1
-            edge.source_span = new_span
-        elif status == "repaired":
-            repaired += 1
-            edge.source_span = new_span
+        if ch in _HYPHENS:
+            out.append(f"[{re.escape(_HYPHENS)}]")
+        elif ch in _SINGLE_QUOTES:
+            out.append(f"[{re.escape(_SINGLE_QUOTES)}]")
+        elif ch in _DOUBLE_QUOTES:
+            out.append(f"[{re.escape(_DOUBLE_QUOTES)}]")
         else:
-            dropped += 1
-            edge.evidentiality = "inferred"
-            edge.source_span = None
-            edge.quote = None
+            out.append(re.escape(ch))
+        i += 1
+    return "".join(out)
 
-    kept_glossary = []
-    for term in response.glossary:
-        status, new_span = verify_span(passage, term.source_span, term.term)
-        if status == "verified":
-            verified += 1
-            term.source_span = new_span
-            kept_glossary.append(term)
-        elif status == "repaired":
-            repaired += 1
-            term.source_span = new_span
-            kept_glossary.append(term)
-        else:
-            dropped += 1
-    response.glossary = kept_glossary
 
-    response.meta.spans_verified = verified
-    response.meta.spans_repaired = repaired
-    response.meta.spans_dropped = dropped
-    return response
+def find_span(passage: str, quote: str) -> tuple[int, int] | None:
+    """
+    Locates a verbatim quote in the passage: an exact substring match first,
+    then a match tolerant of whitespace runs and typographic punctuation
+    substitutions.
+    Parameters:
+        passage (str): The original submitted passage
+        quote (str): The candidate verbatim quote to locate
+    Returns:
+        span (tuple[int, int] | None): (start, end) character offsets into
+            passage, or None if the quote cannot be found
+    """
+    if not quote:
+        return None
+    idx = passage.find(quote)
+    if idx != -1:
+        return idx, idx + len(quote)
+    pattern = _flexible_pattern(quote)
+    if not pattern:
+        return None
+    match = re.search(pattern, passage)
+    if match:
+        return match.span()
+    return None
+
+
+def _valid_spans(spans: list[tuple[int, int]], passage_len: int) -> list[tuple[int, int]]:
+    """
+    Filters a list of [start, end] offset pairs to ones that actually fall
+    within the passage.
+    Parameters:
+        spans (list[tuple[int, int]]): candidate offset pairs
+        passage_len (int): length of the passage they should index into
+    Returns:
+        valid (list[tuple[int, int]]): only the pairs with 0 <= start < end <= passage_len
+    """
+    return [(s, e) for (s, e) in spans if isinstance(s, int) and isinstance(e, int) and 0 <= s < e <= passage_len]
+
+
+def verify_response(response: ExplainResponse, passage: str) -> list[str]:
+    """
+    Bounds-checks every span, verifies every quote against the passage
+    verbatim (correcting its offsets or dropping it), and flags figures whose
+    nodes carry no attribution/hedge variation at all. Mutates response in place.
+    Parameters:
+        response (ExplainResponse): The parsed, structurally-valid model output
+        passage (str): The original submitted passage
+    Returns:
+        warnings (list[str]): One line per span dropped, quote dropped, or
+            figure flagged
+    """
+    warnings: list[str] = []
+    n = len(passage)
+
+    for seg in response.segments:
+        before = len(seg.spans)
+        seg.spans = _valid_spans(seg.spans, n)
+        if len(seg.spans) < before:
+            warnings.append(f"segment '{seg.register}': dropped {before - len(seg.spans)} out-of-bounds span(s)")
+
+    for item in response.left_in_text:
+        before = len(item.spans)
+        item.spans = _valid_spans(item.spans, n)
+        if len(item.spans) < before:
+            warnings.append(f"left_in_text '{item.reason}': dropped {before - len(item.spans)} out-of-bounds span(s)")
+
+    for g in response.glossary:
+        before = len(g.spans)
+        g.spans = _valid_spans(g.spans, n)
+        if len(g.spans) < before:
+            warnings.append(f"glossary '{g.term}': dropped {before - len(g.spans)} out-of-bounds span(s)")
+
+    for fig in response.figures:
+        for node in fig.nodes:
+            before = len(node.spans)
+            node.spans = _valid_spans(node.spans, n)
+            if len(node.spans) < before:
+                warnings.append(f"node '{node.id}': dropped {before - len(node.spans)} out-of-bounds span(s)")
+
+        for edge in fig.edges:
+            before = len(edge.spans)
+            edge.spans = _valid_spans(edge.spans, n)
+            if len(edge.spans) < before:
+                warnings.append(f"edge '{edge.from_}->{edge.to}': dropped {before - len(edge.spans)} out-of-bounds span(s)")
+
+        # The one place a real quote/offset pair exists together - verified
+        # the same way as the rest of this pipeline: search, correct, or drop.
+        kept_quotes = []
+        for q in fig.quotes:
+            found = find_span(passage, q.text)
+            if found is None:
+                warnings.append(f"figure '{fig.form}': quote {q.text!r} not found in passage, dropped")
+                continue
+            q.spans = [found]
+            kept_quotes.append(q)
+        fig.quotes = kept_quotes
+
+        # Step 7's uniformity guard, checked mechanically: if every node in a
+        # figure shares one hedge and one attribution.named value, the model
+        # was told to re-read for attribution before returning. The backend
+        # can't re-read for it, but it can make sure this doesn't pass silently.
+        if len(fig.nodes) > 1:
+            hedges = {node.hedge for node in fig.nodes}
+            named = {node.attribution.named for node in fig.nodes}
+            if len(hedges) == 1 and len(named) == 1:
+                warnings.append(
+                    f"figure '{fig.form}' ({fig.question!r}): every node shares hedge="
+                    f"'{next(iter(hedges))}' and attribution.named={next(iter(named))} - "
+                    "worth double-checking this isn't under-attributed"
+                )
+
+    return warnings
