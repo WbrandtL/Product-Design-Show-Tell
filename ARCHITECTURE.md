@@ -9,9 +9,8 @@ The backend's only job is producing a validated, schema-shaped explanation of
 a passage — no rendering, no styling, no images. The extension's only job is
 capturing a selection and drawing the diagram from that schema. Keeping them
 as separate processes (HTTP between them, not a shared runtime) means the
-rendering logic can be swapped for a different surface — the `gist` native
-macOS app (on `backup/gist-v2-2026-09-15`) is exactly that: same backend,
-different capture/render frontend, zero backend changes required.
+rendering logic can be swapped for a different capture surface entirely
+without touching the backend at all.
 
 ## Why no image generation
 
@@ -25,7 +24,7 @@ against the literal passage text (see "Span verification" below). Fidelity
 to the source is the entire value proposition; a generated image would trade
 that for a nicer-looking result that might be wrong.
 
-## Pipeline (`reading-backend`)
+## Pipeline (`gist-backend`)
 
 ```
 ┌──────────────────┐
@@ -77,16 +76,16 @@ with zero network access.
 
 | Module | Path | Responsibility |
 |---|---|---|
-| API | `reading-backend/app/main.py` | Routes: `/v1/explain`, `/v1/explain/{id}`, `/v1/explain/{id}/relayout`, `/v1/samples`, `/healthz` |
-| Pipeline | `reading-backend/app/pipeline.py` | Orchestrates cache → LLM → repair → verify |
-| LLM client | `reading-backend/app/llm.py`, `prompts.py` | Groq call, few-shot prompt, JSON-mode parsing |
-| Span verification | `reading-backend/app/verify.py` | Deterministic exact/repaired/dropped classification against the literal passage |
-| Cache | `reading-backend/app/cache.py` | SQLite (`cache.db`), keyed by passage+mode+schema+model hash |
-| Schema | `reading-backend/app/schema.py` | Pydantic models for `ExplainRequest`/`ExplainResponse` |
-| Floating icon + picker | `reading-extension/src/content.ts` | Runs in the page's own origin; selection UI |
-| Backend client | `reading-extension/src/background.ts` | Service worker; the only piece that calls the backend (content scripts would be blocked by CORS calling it directly — the extension's `host_permissions` cover this instead) |
-| On-device library | `reading-extension/src/storage.ts` | `chrome.storage.local`, most-recent 60 results |
-| Diagram renderer | `reading-extension/src/render.ts` | Draws all five forms (spectrum, comparison, concept map, process, axis) from `ExplainResponse` fields only |
+| API | `gist-backend/app/main.py` | Routes: `/v1/explain`, `/v1/explain/{id}`, `/v1/explain/{id}/relayout`, `/v1/samples`, `/healthz` |
+| Pipeline | `gist-backend/app/pipeline.py` | Orchestrates cache → LLM → repair → verify |
+| LLM client | `gist-backend/app/llm.py`, `prompts.py` | Groq call, few-shot prompt, JSON-mode parsing |
+| Span verification | `gist-backend/app/verify.py` | Deterministic exact/repaired/dropped classification against the literal passage |
+| Cache | `gist-backend/app/cache.py` | SQLite (`cache.db`), keyed by passage+mode+schema+model hash |
+| Schema | `gist-backend/app/schema.py` | Pydantic models for `ExplainRequest`/`ExplainResponse` |
+| Floating icon + picker | `gist-extension/src/content.ts` | Runs in the page's own origin; selection UI |
+| Backend client | `gist-extension/src/background.ts` | Service worker; the only piece that calls the backend (content scripts would be blocked by CORS calling it directly — the extension's `host_permissions` cover this instead) |
+| On-device library | `gist-extension/src/storage.ts` | `chrome.storage.local`, most-recent 60 results |
+| Diagram renderer | `gist-extension/src/render.ts` | Draws all five forms (spectrum, comparison, concept map, process, axis) from `ExplainResponse` fields only |
 
 Each module only talks to the next one through the interfaces above — the
 extension never touches the LLM or the cache directly, only `POST
@@ -96,6 +95,6 @@ extension, the test page, or `scripts/try_explain.py`.
 ## Non-goals
 
 No PDF parsing, no auth, no real frontend styling beyond the extension's own
-mockup-matched CSS, no streaming, no whole-paper analysis, no other LLM
+CSS, no streaming, no whole-paper analysis, no other LLM
 providers, no deployment tooling beyond what's needed to point the extension
 at a hosted backend URL. All scoped out deliberately, not by oversight.
