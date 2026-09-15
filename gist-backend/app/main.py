@@ -1,5 +1,5 @@
 """
-FastAPI application entrypoint for the reading-tool backend.
+FastAPI application entrypoint for the Gist backend.
 """
 
 import os
@@ -17,7 +17,7 @@ from app.schema import ExplainRequest, ExplainResponse, RelayoutRequest
 
 load_dotenv()
 
-app = FastAPI(title="Reading Tool Backend")
+app = FastAPI(title="Gist Backend")
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

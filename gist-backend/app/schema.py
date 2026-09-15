@@ -1,5 +1,5 @@
 """
-Pydantic v2 models for the reading-tool backend response contract.
+Pydantic v2 models for the Gist backend response contract.
 """
 
 from typing import Literal, Optional

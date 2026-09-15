@@ -1,4 +1,4 @@
-# Reading Tool Backend
+# Gist Backend
 
 Turns a selected passage (1-3 paragraphs of dense academic text) into a structured
 explanation object: concepts and people, typed relations between them, plain-language
