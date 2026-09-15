@@ -8,8 +8,16 @@ from openai import OpenAI
 
 from app.prompts import FEW_SHOT_PASSAGE, FEW_SHOT_RESPONSE, SYSTEM_PROMPT
 
-DEFAULT_MODEL = "moonshotai/kimi-k2-instruct"
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 REQUEST_TIMEOUT_SECONDS = 30
+# gpt-oss models are reasoning models: left at their default reasoning effort,
+# they spend the entire output budget on hidden reasoning tokens and return
+# empty content, which Groq's json_object mode then rejects with an opaque
+# "Failed to validate JSON" 400 (empty failed_generation) - indistinguishable
+# from a real extraction failure without inspecting the raw exception. Both
+# params below are required to get actual JSON content back.
+REASONING_EFFORT = "low"
+MAX_COMPLETION_TOKENS = 2048
 
 
 def get_model_name() -> str:
@@ -96,6 +104,8 @@ def extract_structure(passage: str, mode: str, context) -> str:
         messages=messages,
         temperature=0.2,
         response_format={"type": "json_object"},
+        max_completion_tokens=MAX_COMPLETION_TOKENS,
+        extra_body={"reasoning_effort": REASONING_EFFORT},
     )
     return completion.choices[0].message.content
 
@@ -130,5 +140,7 @@ def repair_structure(raw_output: str, errors: str) -> str:
         messages=messages,
         temperature=0.2,
         response_format={"type": "json_object"},
+        max_completion_tokens=MAX_COMPLETION_TOKENS,
+        extra_body={"reasoning_effort": REASONING_EFFORT},
     )
     return completion.choices[0].message.content
