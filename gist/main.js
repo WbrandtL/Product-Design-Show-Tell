@@ -60,6 +60,31 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Resolves the current retry-wait early, if one is in progress - set by
+// cancelableSleep() while it's pending, cleared once it settles either way.
+let cancelRetrySleep = null;
+
+/**
+ * Like sleep(), but cancelQueue() can resolve it early - used for the 429
+ * retry-after wait, which can be 15-20+ minutes on the shared free tier, so
+ * a click on the icon needs to be able to interrupt it immediately.
+ * @param {number} ms
+ * @returns {Promise<void>}
+ */
+function cancelableSleep(ms) {
+  return new Promise((resolve) => {
+    const id = setTimeout(() => {
+      cancelRetrySleep = null;
+      resolve();
+    }, ms);
+    cancelRetrySleep = () => {
+      clearTimeout(id);
+      cancelRetrySleep = null;
+      resolve();
+    };
+  });
+}
+
 /**
  * Makes a JSON POST request against the local reading-backend. Never hangs
  * indefinitely - rejects on timeout so a stuck request can't leave the
@@ -147,6 +172,18 @@ async function processQueue() {
         const m = /retry after (\d+)/i.exec(typeof json.detail === "string" ? json.detail : "");
         retryAfterMs = (m ? parseInt(m[1], 10) : 15) * 1000;
         sendQueue.unshift({ text }); // put it back at the front, try again after the wait
+        // Silent otherwise: a multi-minute wait (the shared free-tier Groq
+        // quota can report waits of 15-20+ minutes under heavy use) looks
+        // identical to a hung app without this - the icon just sits queued
+        // with no indication anything is happening, let alone how long it'll
+        // take. This is the single most common source of "it's stuck" reports.
+        const mins = Math.max(1, Math.round(retryAfterMs / 60000));
+        if (widgetWin) widgetWin.webContents.send("rate-limited", retryAfterMs);
+        new Notification({
+          title: "Groq's free tier is rate-limited right now",
+          body: `Gist will retry automatically in about ${mins} minute${mins === 1 ? "" : "s"} - no need to click again.`,
+          silent: true,
+        }).show();
       } else {
         const detail = typeof json.detail === "string" ? json.detail : JSON.stringify(json.detail);
         record = library.save({ passage: text, response: null, error: detail, httpStatus: status });
@@ -177,9 +214,25 @@ async function processQueue() {
   }
 
   if (retryAfterMs) {
-    await sleep(retryAfterMs);
+    await cancelableSleep(retryAfterMs);
   }
   if (sendQueue.length) processQueue();
+}
+
+/**
+ * Stops whatever's queued or being waited on - drops any not-yet-sent
+ * passages and, if a 429 retry-wait is in progress, cuts it short instead of
+ * letting it run out. Silent by design: a cancelled capture just disappears
+ * rather than leaving a "cancelled" entry in the library. Doesn't interrupt
+ * a request already in flight to the backend - that one's already been sent
+ * and will complete normally if it succeeds; this only stops what comes
+ * after it.
+ * @returns {void}
+ */
+function cancelQueue() {
+  sendQueue.length = 0;
+  if (cancelRetrySleep) cancelRetrySleep();
+  pushState();
 }
 
 /**
@@ -253,7 +306,16 @@ app.whenReady().then(async () => {
 
   // Registered before the windows are created so the modal's own on-load
   // fetch can never race ahead of handler registration.
-  ipcMain.on("widget-click", runCapture);
+  // A click while something's queued or being retried stops it instead of
+  // starting a new capture - the icon doubles as a cancel button whenever
+  // it's showing anything other than its idle state.
+  ipcMain.on("widget-click", () => {
+    if (sending || sendQueue.length > 0) {
+      cancelQueue();
+    } else {
+      runCapture();
+    }
+  });
   ipcMain.on("widget-context-menu", showWidgetContextMenu);
   ipcMain.on("open-library", openLibrary);
   ipcMain.handle("get-library", () => library.list());

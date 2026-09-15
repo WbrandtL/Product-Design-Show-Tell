@@ -1,6 +1,6 @@
 {
   "name": "gist",
-  "version": "0.1.1",
+  "version": "0.1.3",
   "private": true,
   "description": "A floating desktop widget that turns any selected passage, in any app, into a verified reading diagram via the local reading-backend.",
   "main": "main.js",
@@ -18,7 +18,8 @@
     "files": ["main.js", "preload.js", "lib/**/*", "renderer/**/*"],
     "mac": {
       "category": "public.app-category.education",
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "build/icon.icns"
     }
   }
 }

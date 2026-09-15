@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("widget", {
   onQueueSize: (cb) => ipcRenderer.on("queue-size", (_e, n) => cb(n)),
   onBackendWaking: (cb) => ipcRenderer.on("backend-waking", cb),
   onBackendReady: (cb) => ipcRenderer.on("backend-ready", cb),
+  onRateLimited: (cb) => ipcRenderer.on("rate-limited", (_e, retryAfterMs) => cb(retryAfterMs)),
 });
 
 contextBridge.exposeInMainWorld("library", {
