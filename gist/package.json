@@ -1,0 +1,34 @@
+{
+  "name": "gist",
+  "version": "0.1.6",
+  "private": true,
+  "description": "A floating desktop widget that turns any selected passage, in any app, into a verified reading diagram via the local gist-backend.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "devDependencies": {
+    "electron": "^44.3.0",
+    "electron-builder": "^25.0.5"
+  },
+  "build": {
+    "appId": "com.timeaware.gist",
+    "productName": "Gist",
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "renderer/**/*",
+      "node_modules/**/*"
+    ],
+    "mac": {
+      "category": "public.app-category.education",
+      "target": "dmg",
+      "icon": "build/icon.icns"
+    }
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "^4.2.6"
+  }
+}
