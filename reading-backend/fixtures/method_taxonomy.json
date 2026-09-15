@@ -1,0 +1,122 @@
+{
+  "id": "9b50ab48-3d1c-47c2-acb6-8da295ff6cb7",
+  "schema_version": "1.0",
+  "passage_pattern": "taxonomy",
+  "layout_hint": "hierarchy",
+  "takeaway": "Qualitative coding has four main families, each suited to a different kind of question.",
+  "explain_script": "There are several ways to code qualitative data. Descriptive coding names the topic, in vivo coding keeps the participant's own words, process coding tracks action over time, and values coding captures beliefs. Researchers often combine them across passes.",
+  "nodes": [
+    {
+      "id": "descriptive",
+      "label": "Descriptive coding",
+      "plain_label": "naming the topic",
+      "kind": "method",
+      "one_line": "Assigns a short noun phrase summarizing what a passage is about.",
+      "emphasis": 1,
+      "source_span": [
+        116,
+        134
+      ],
+      "quote": "Descriptive coding"
+    },
+    {
+      "id": "in_vivo",
+      "label": "In vivo coding",
+      "plain_label": "using the speaker's own words",
+      "kind": "method",
+      "one_line": "Uses the participant's own words as the code itself.",
+      "emphasis": 2,
+      "source_span": [
+        256,
+        270
+      ],
+      "quote": "In vivo coding"
+    },
+    {
+      "id": "process",
+      "label": "Process coding",
+      "plain_label": "tracking action over time",
+      "kind": "method",
+      "one_line": "Uses action words to capture change or transition over time.",
+      "emphasis": 2,
+      "source_span": [
+        396,
+        410
+      ],
+      "quote": "Process coding"
+    },
+    {
+      "id": "values",
+      "label": "Values coding",
+      "plain_label": "capturing beliefs and attitudes",
+      "kind": "method",
+      "one_line": "Applies codes reflecting a participant's values, attitudes, and beliefs.",
+      "emphasis": 2,
+      "source_span": [
+        568,
+        581
+      ],
+      "quote": "Values coding"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "in_vivo",
+      "target": "descriptive",
+      "relation": "contrasts_with",
+      "label": "preserves meaning that flattens",
+      "evidentiality": "stated",
+      "source_span": [
+        325,
+        394
+      ],
+      "quote": "preserving the vernacular meaning that descriptive coding can flatten"
+    },
+    {
+      "id": "e2",
+      "source": "process",
+      "target": "descriptive",
+      "relation": "contrasts_with",
+      "label": "suits change, unlike",
+      "evidentiality": "inferred",
+      "source_span": null,
+      "quote": null
+    },
+    {
+      "id": "e3",
+      "source": "values",
+      "target": "in_vivo",
+      "relation": "applies_to",
+      "label": "is often paired with",
+      "evidentiality": "stated",
+      "source_span": [
+        664,
+        696
+      ],
+      "quote": "often paired with in vivo coding"
+    }
+  ],
+  "glossary": [
+    {
+      "term": "gerunds",
+      "plain_definition": "Verb forms ending in -ing, used as nouns.",
+      "in_this_passage": "What process coding uses to name actions instead of topics.",
+      "source_span": [
+        430,
+        437
+      ]
+    }
+  ],
+  "simplifications": [
+    "Presents four methods as distinct when researchers often blend them within one project."
+  ],
+  "meta": {
+    "model": "fixture",
+    "latency_ms": 1300,
+    "cached": false,
+    "spans_verified": 0,
+    "spans_repaired": 0,
+    "spans_dropped": 0
+  }
+}

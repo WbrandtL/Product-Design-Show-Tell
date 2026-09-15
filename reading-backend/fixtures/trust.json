@@ -1,0 +1,158 @@
+{
+  "id": "16651af3-73f2-4900-b71c-8c1a1e99e955",
+  "schema_version": "1.0",
+  "passage_pattern": "definition_dispute",
+  "layout_hint": "comparison_table",
+  "takeaway": "Giddens ties trust to accepting risk, while Luhmann ties it to ignoring complexity.",
+  "explain_script": "Giddens and Luhmann both write about trust but mean different things by it. Giddens says trust is what lets you act despite risk you can't fully know. Luhmann says trust is what lets you ignore most possible futures so you can act at all.",
+  "nodes": [
+    {
+      "id": "giddens",
+      "label": "Giddens",
+      "plain_label": "Giddens",
+      "kind": "theorist",
+      "one_line": "Says trust is confidence in reliability despite risk.",
+      "emphasis": 1,
+      "source_span": [
+        0,
+        7
+      ],
+      "quote": "Giddens"
+    },
+    {
+      "id": "luhmann",
+      "label": "Luhmann",
+      "plain_label": "Luhmann",
+      "kind": "theorist",
+      "one_line": "Says trust reduces complexity by ignoring most futures.",
+      "emphasis": 1,
+      "source_span": [
+        12,
+        19
+      ],
+      "quote": "Luhmann"
+    },
+    {
+      "id": "trust",
+      "label": "trust",
+      "plain_label": "trust",
+      "kind": "concept",
+      "one_line": "The shared idea both theorists define in incompatible ways.",
+      "emphasis": 2,
+      "source_span": [
+        31,
+        60
+      ],
+      "quote": "trust as central to modernity"
+    },
+    {
+      "id": "risk",
+      "label": "risk",
+      "plain_label": "not knowing the outcome",
+      "kind": "concept",
+      "one_line": "The uncertainty Giddens says trust lets you act despite.",
+      "emphasis": 3,
+      "source_span": [
+        184,
+        204
+      ],
+      "quote": "a background of risk"
+    },
+    {
+      "id": "complexity",
+      "label": "social complexity",
+      "plain_label": "too many possible futures",
+      "kind": "concept",
+      "one_line": "The overwhelming number of outcomes Luhmann says trust filters down.",
+      "emphasis": 3,
+      "source_span": [
+        380,
+        395
+      ],
+      "quote": "reducing social"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "source": "giddens",
+      "target": "luhmann",
+      "relation": "contrasts_with",
+      "label": "defines trust differently than",
+      "evidentiality": "stated",
+      "source_span": [
+        71,
+        101
+      ],
+      "quote": "define it in incompatible ways"
+    },
+    {
+      "id": "e2",
+      "source": "giddens",
+      "target": "risk",
+      "relation": "defines",
+      "label": "defines trust using",
+      "evidentiality": "stated",
+      "source_span": [
+        178,
+        204
+      ],
+      "quote": "given a background of risk"
+    },
+    {
+      "id": "e3",
+      "source": "luhmann",
+      "target": "complexity",
+      "relation": "defines",
+      "label": "defines trust using",
+      "evidentiality": "stated",
+      "source_span": [
+        364,
+        395
+      ],
+      "quote": "a mechanism for reducing social"
+    },
+    {
+      "id": "e4",
+      "source": "risk",
+      "target": "complexity",
+      "relation": "contrasts_with",
+      "label": "is a different problem than",
+      "evidentiality": "inferred",
+      "source_span": null,
+      "quote": null
+    }
+  ],
+  "glossary": [
+    {
+      "term": "modernity",
+      "plain_definition": "The recent historical period shaped by industrial, rational society.",
+      "in_this_passage": "The era where both theorists say trust becomes especially important.",
+      "source_span": [
+        51,
+        60
+      ]
+    },
+    {
+      "term": "complexity reduction",
+      "plain_definition": "Ignoring most options so you can decide at all.",
+      "in_this_passage": "How Luhmann says trust works: it filters out most possible futures.",
+      "source_span": [
+        691,
+        711
+      ]
+    }
+  ],
+  "simplifications": [
+    "Flattens a longer disagreement about modernity into a single contrast over trust.",
+    "Treats risk and complexity as fully separate when the theorists' accounts overlap."
+  ],
+  "meta": {
+    "model": "fixture",
+    "latency_ms": 1400,
+    "cached": false,
+    "spans_verified": 0,
+    "spans_repaired": 0,
+    "spans_dropped": 0
+  }
+}
