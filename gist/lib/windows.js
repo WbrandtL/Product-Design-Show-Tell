@@ -1,7 +1,7 @@
 "use strict";
 
 const path = require("path");
-const { BrowserWindow, screen } = require("electron");
+const { app, BrowserWindow, screen } = require("electron");
 
 // Deliberately small and fully interactive, no click-through. An earlier
 // version made a larger window mostly click-through and toggled it live on
@@ -81,6 +81,15 @@ function createModalWindow() {
   });
   win.loadFile(path.join(__dirname, "..", "renderer", "modal.html"));
   win.on("close", (e) => {
+    // Without the isQuittingApp check, this unconditionally blocks the app
+    // from ever quitting: macOS's normal quit sequence (Activity Monitor's
+    // Quit, Cmd+Q, the Dock menu, `osascript -e 'tell application "Gist" to
+    // quit'`) closes every window in turn, and preventDefault()-ing this
+    // one's close - with no way to distinguish "just this window" from "the
+    // whole app is quitting" - stalls that sequence forever. Confirmed by
+    // direct reproduction: neither a graceful quit request nor SIGTERM
+    // terminated the process while this was unconditional.
+    if (app.isQuittingApp) return;
     e.preventDefault();
     win.hide();
   });

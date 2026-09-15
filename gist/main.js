@@ -393,6 +393,11 @@ app.whenReady().then(async () => {
 app.on("window-all-closed", (e) => e.preventDefault());
 
 app.on("before-quit", () => {
+  // Read by the library window's close handler (lib/windows.js) so it can
+  // tell "the app is quitting, let this window actually close" apart from
+  // "the user just closed this one window, hide it instead" - without this
+  // distinction the app could never quit at all (see the comment there).
+  app.isQuittingApp = true;
   globalShortcut.unregisterAll();
   backend.stopBackend();
 });
