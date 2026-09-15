@@ -3,6 +3,7 @@
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const execFileAsync = promisify(execFile);
+const { keyboard, Key } = require("@nut-tree-fork/nut-js");
 
 const SENTINEL_PREFIX = "gist-sentinel-";
 
@@ -33,8 +34,8 @@ async function getFrontmostAppName() {
 }
 
 /**
- * Re-activates the given app (if any) and then simulates Cmd+C, as one
- * AppleScript call. Re-activating immediately before the keystroke matters:
+ * Re-activates the given app (if any), then simulates Cmd+C natively - not
+ * via osascript. Re-activating immediately before the keystroke matters:
  * clicking our own window can transiently disturb which app is receiving
  * keyboard events even when it never shows up as a frontmost-app change on
  * either side of the click (confirmed empirically - triggering a capture via
@@ -42,15 +43,35 @@ async function getFrontmostAppName() {
  * works instantly every time, while a raw click on our BrowserWindow does
  * not) - explicitly re-asserting the target app right before the keystroke
  * is the reliable fix for that, regardless of the exact underlying cause.
- * Requires the app to be granted Accessibility permission in System Settings
+ *
+ * The keystroke itself deliberately does NOT go through
+ * `osascript -e 'tell application "System Events" to keystroke ...'` - that
+ * routes the actual input-injection through a spawned child process, and
+ * macOS's Accessibility permission check attaches to whichever process is
+ * literally asking (osascript), not to Gist, the app the user actually
+ * grants permission to. Confirmed by direct reproduction on multiple
+ * machines, including a brand-new install with no prior history: granting
+ * Gist Accessibility access never covered this, because Gist was never
+ * really the one asking. nut-js posts the synthetic key event from inside
+ * Gist's own process instead, so the permission Gist actually prompts for
+ * is the one this needs.
+ *
+ * The `activate` call is still done via osascript - unlike the keystroke,
+ * this only needs Automation permission (to tell a named app to come to
+ * the front), which has been reliable in testing, and re-doing it natively
+ * would need per-app window lookups nut-js doesn't provide.
+ *
+ * Requires Gist to be granted Accessibility permission in System Settings
  * > Privacy & Security > Accessibility.
  * @param {string|null} targetAppName app to reactivate first, if known
  * @returns {Promise<void>}
  */
 async function sendCopyKeystroke(targetAppName) {
-  const activate = targetAppName ? `tell application "${asQuoted(targetAppName)}" to activate\n` : "";
-  const script = `${activate}tell application "System Events" to keystroke "c" using command down`;
-  await execFileAsync("osascript", ["-e", script]);
+  if (targetAppName) {
+    await execFileAsync("osascript", ["-e", `tell application "${asQuoted(targetAppName)}" to activate`]);
+  }
+  await keyboard.pressKey(Key.LeftCmd, Key.C);
+  await keyboard.releaseKey(Key.LeftCmd, Key.C);
 }
 
 /**
@@ -116,7 +137,7 @@ async function captureSelection(clipboard, targetAppName = null) {
         error:
           "Couldn't send Cmd+C to the frontmost app. Gist needs Accessibility " +
           "permission: System Settings → Privacy & Security → Accessibility, then " +
-          "enable Gist (or your terminal, in development). " + String(err.message || err),
+          "enable Gist. " + String(err.message || err),
       };
     }
 
