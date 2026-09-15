@@ -14,7 +14,6 @@ the reasoning behind the "no generated images" stance.
 ```
 gist-backend/    FastAPI service: LLM extraction, span verification, cache, fixture fallback
 gist-extension/  Manifest V3 browser extension: floating icon, on-device library, diagram renderer
-gist/            Native macOS app (Electron): floating widget, works system-wide (not just in-browser)
 ```
 
 ## Setup — backend
@@ -33,18 +32,6 @@ for interactive Swagger, or http://localhost:8000/healthz to check status. With
 no API key (or on a Groq failure/timeout), it serves a pre-baked fixture
 response instead — the test page and extension both work fully offline.
 
-## Setup — native macOS app
-
-```bash
-cd gist
-npm install
-npm start        # dev mode, or: npm run dist for a real .app
-```
-
-Select text in any app, then press **⌘⇧G** (or click the floating icon) to
-capture it. See [gist/README.md](./gist/README.md) for Accessibility
-permissions, building a real `.app`, and known limitations (macOS only).
-
 ## API
 
 - `POST /v1/explain` — `{passage, context?, mode?}` → `ExplainResponse`
@@ -54,14 +41,6 @@ permissions, building a real `.app`, and known limitations (macOS only).
 - `GET /healthz` — `{status, model, has_api_key, cache_entries}`
 
 Passages must be 200–4000 characters; anything outside that returns 422.
-
-> **Known mismatch:** both `gist-extension/src/background.ts` and
-> `gist/lib/backend.js` + `gist/main.js` call `/api/health` and
-> `/api/explain`, but the backend only exposes `/healthz` and `/v1/explain`
-> (see above) — those paths don't exist on this backend, whether it's
-> `localhost:8000` or the deployed Render URL. In the native app this also
-> means `ensureBackend()`'s liveness check always reports the backend as
-> down. Worth fixing before relying on either consumer end-to-end.
 
 ## Non-goals
 

@@ -2,18 +2,15 @@
 
 ## Stack choice
 
-**FastAPI + Pydantic backend, with two independent frontends: a Manifest V3
-browser extension (TypeScript, esbuild) and a native macOS app (Electron).**
+**FastAPI + Pydantic backend, Manifest V3 browser extension (TypeScript,
+esbuild) for the frontend.**
 
 The backend's only job is producing a validated, schema-shaped explanation of
-a passage — no rendering, no styling, no images. Each frontend's only job is
-capturing a selection and drawing the diagram from that schema. Keeping the
-backend as a separate HTTP process (not a shared runtime) is what makes two
-totally different capture surfaces possible from one backend, unmodified:
-the extension captures via the page DOM and runs only in the browser; the
-native app (`gist/`) captures system-wide (any app, not just browser tabs)
-via a simulated Cmd+C against the OS clipboard, and can work over a PDF
-reader, Mail, Notes — anything.
+a passage — no rendering, no styling, no images. The extension's only job is
+capturing a selection and drawing the diagram from that schema. Keeping them
+as separate processes (HTTP between them, not a shared runtime) means the
+rendering logic could be swapped for a different capture surface entirely
+without touching the backend at all.
 
 ## Why no image generation
 
@@ -89,20 +86,15 @@ with zero network access.
 | Backend client | `gist-extension/src/background.ts` | Service worker; the only piece that calls the backend (content scripts would be blocked by CORS calling it directly — the extension's `host_permissions` cover this instead) |
 | On-device library | `gist-extension/src/storage.ts` | `chrome.storage.local`, most-recent 60 results |
 | Diagram renderer | `gist-extension/src/render.ts` | Draws all five forms (spectrum, comparison, concept map, process, axis) from `ExplainResponse` fields only |
-| Selection capture | `gist/lib/selection.js` | System-wide: simulated Cmd+C via `nut-js`, reads the OS clipboard |
-| Backend lifecycle | `gist/lib/backend.js` | Finds/spawns a local `gist-backend`, or uses a hosted URL in a packaged build |
-| Floating widget | `gist/renderer/widget.js`, `widget.html` | The always-on-top icon; hover reveals the library button |
-| Library + diagram renderer | `gist/renderer/modal.js`, `diagrams.js` | Same five diagram forms as the extension, rendered natively |
 
-Each module only talks to the next one through the interfaces above — neither
-frontend touches the LLM or the cache directly, only `POST /v1/explain`; the
-pipeline never knows whether the caller is a browser extension, the native
-app, the test page, or `scripts/try_explain.py`.
+Each module only talks to the next one through the interfaces above — the
+extension never touches the LLM or the cache directly, only `POST
+/v1/explain`; the pipeline never knows whether the caller is the extension,
+the test page, or `scripts/try_explain.py`.
 
 ## Non-goals
 
-No PDF parsing, no auth, no real frontend styling beyond each frontend's own
+No PDF parsing, no auth, no real frontend styling beyond the extension's own
 CSS, no streaming, no whole-paper analysis, no other LLM providers, no
-deployment tooling beyond what's needed to point a frontend at a hosted
-backend URL, no Windows build of the native app (see `gist/README.md`). All
-scoped out deliberately, not by oversight.
+deployment tooling beyond what's needed to point the extension at a hosted
+backend URL. All scoped out deliberately, not by oversight.

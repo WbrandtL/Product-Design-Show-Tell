@@ -3,7 +3,7 @@
 // localhost directly; a request from here is covered by this extension's
 // own host_permissions instead, so no CORS setup is needed on the backend.
 
-const BACKEND_URL = "https://designtask1.onrender.com";
+const BACKEND_URL = "http://localhost:8000";
 
 interface ExplainRequest {
   type: "explain";
@@ -18,10 +18,13 @@ type ExplainResult =
 async function callExplain(passage: string, context: string | null | undefined): Promise<ExplainResult> {
   let resp: Response;
   try {
-    resp = await fetch(`${BACKEND_URL}/api/explain`, {
+    resp = await fetch(`${BACKEND_URL}/v1/explain`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ passage, context: context ?? null }),
+      // The backend's `context` field is a structured ExplainContext object
+      // ({paper_title, research_question, surrounding_text}), not a bare
+      // string - sending the page title directly would fail validation.
+      body: JSON.stringify({ passage, context: context ? { paper_title: context } : null }),
     });
   } catch (e) {
     return {
