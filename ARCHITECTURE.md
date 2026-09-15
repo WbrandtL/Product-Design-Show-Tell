@@ -2,143 +2,100 @@
 
 ## Stack choice
 
-**Electron + React + TypeScript + Vite (via `electron-vite`), with `better-sqlite3` for
-storage, Tailwind CSS v4 + `lucide-react` for the UI, and hand-drawn SVG for charts (no
-charting library).**
+**FastAPI + Pydantic backend, Manifest V3 browser extension (TypeScript,
+esbuild) for the frontend.**
 
-One-line reason: Electron has the most mature, best-documented path to the three things
-this app actually needs — a tray/menu-bar app, a synchronous local SQLite connection in
-a long-lived Node process, and a local HTTP server for the browser extension — with the
-lowest integration risk to get all of it working reliably in a single session. Tauri
-would mean writing the tracking daemon and SQLite layer in Rust, which is more work for
-no functional benefit here. Tailwind + hand-drawn SVG charts (vs. Recharts, used in an
-earlier iteration) keeps the whole renderer to one styling system and no chart-library
-dependency, matching a provided design that used the same approach.
+The backend's only job is producing a validated, schema-shaped explanation of
+a passage — no rendering, no styling, no images. The extension's only job is
+capturing a selection and drawing the diagram from that schema. Keeping them
+as separate processes (HTTP between them, not a shared runtime) means the
+rendering logic can be swapped for a different surface — the `gist` native
+macOS app (on `backup/gist-v2-2026-09-15`) is exactly that: same backend,
+different capture/render frontend, zero backend changes required.
 
-## Extension-communication choice
+## Why no image generation
 
-**A local-only HTTP server (`127.0.0.1:47850`) run by the desktop app's main process, that
-the browser extension's service worker POSTs to.**
+Every mark on a card is drawn from a structured field in `ExplainResponse`
+(a node's `emphasis` sets its weight, `evidentiality`/`basis` sets the
+stated-vs-inferred ink mark), never from an image model asked to "draw a
+diagram." This is a deliberate, load-bearing choice: an image model has no
+way to guarantee a claim it draws is actually in the source passage, while
+every node/edge/glossary term here carries a `source_span` that's checked
+against the literal passage text (see "Span verification" below). Fidelity
+to the source is the entire value proposition; a generated image would trade
+that for a nicer-looking result that might be wrong.
 
-One-line reason: it's transport-agnostic (works identically across Chrome/Edge/Brave with
-zero per-browser setup), requires no native-messaging host manifest to install per OS, and
-is trivial to inspect (`curl http://127.0.0.1:47850/health`). Native messaging was the
-alternative; it needs a registry entry (Windows) or a manifest file in a browser-specific
-directory (macOS/Linux) per browser, which is more moving parts for no real benefit in a
-single-user, single-machine tool.
-
-## Data flow
+## Pipeline (`reading-backend`)
 
 ```
-                         ┌─────────────────────────┐
-                         │   OS (macOS / Windows)   │
-                         │  active window, idle,    │
-                         │  Wi-Fi SSID              │
-                         └────────────┬─────────────┘
-                                      │ polled every ~7.5s
-                                      │ (AppleScript / PowerShell,
-                                      │  Electron powerMonitor,
-                                      │  networksetup / netsh)
-                                      ▼
-                         ┌─────────────────────────┐        ┌──────────────────────────┐
-                         │   TrackingDaemon         │        │  Browser (Chrome/Edge/    │
-                         │   (main/tracking/)       │        │  Brave) + TimeAware       │
-                         └────────────┬─────────────┘        │  Companion extension      │
-                                      │                       │  (browser-extension/)     │
-                                      │ insertDesktopEvent()   │  tracks focused-tab       │
-                                      │                       │  domain + duration        │
-                                      │                       └────────────┬─────────────┘
-                                      │                                    │ POST JSON
-                                      │                                    │ http://127.0.0.1:47850
-                                      │                                    │ /events/browser
-                                      │                       ┌────────────▼─────────────┐
-                                      │                       │   ingestServer.ts         │
-                                      │                       │   (loopback-only HTTP)    │
-                                      │                       └────────────┬─────────────┘
-                                      │                                    │ insertBrowserEvent()
-                                      ▼                                    ▼
-                         ┌─────────────────────────────────────────────────────────┐
-                         │                  raw_events (SQLite)                     │
-                         │   append-only: source, timestamp, duration_ms, app_name, │
-                         │   window_title, domain, is_idle, ssid                    │
-                         └───────────────────────────┬─────────────────────────────┘
-                                                       │ read-only SQL queries
-                                                       │ (main/aggregation/)
-                                                       ▼
-                         ┌─────────────────────────────────────────────────────────┐
-                         │  categorize.ts + trends.ts                               │
-                         │  - resolves app/domain -> category (category_rules)      │
-                         │  - resolves ssid -> location label (ssid_labels)         │
-                         │  - avoids double-counting desktop-vs-extension overlap   │
-                         │  - compares against goals (goals, append-only history)   │
-                         └───────────────────────────┬─────────────────────────────┘
-                                                       │ ipcMain.handle(...)
-                                                       │ (main/ipcHandlers.ts)
-                                                       ▼
-                         ┌─────────────────────────────────────────────────────────┐
-                         │  preload/index.ts  ->  window.timeaware.*                │
-                         │  (contextBridge, narrow typed surface, no logic)         │
-                         └───────────────────────────┬─────────────────────────────┘
-                                                       ▼
-                         ┌─────────────────────────────────────────────────────────┐
-                         │  React dashboard (renderer/)                             │
-                         │  trend charts, goal-vs-actual, location split,           │
-                         │  category rules + SSID labeling settings                 │
-                         └─────────────────────────────────────────────────────────┘
+┌──────────────────┐
+│  Passage (200–    │
+│  4000 chars)      │
+└─────────┬─────────┘
+          │
+          ▼
+┌──────────────────────────┐   hit    ┌─────────────────────────┐
+│  Cache lookup (SQLite)    ├─────────▶│  Return cached response  │
+│  sha256(passage+mode+     │          └─────────────────────────┘
+│  schema_version+model)    │
+└─────────┬─────────────────┘
+          │ miss
+          ▼
+┌──────────────────────────┐
+│  LLM extraction           │  one Groq call, JSON mode,
+│  (app/llm.py)              │  temperature 0.2, one few-shot example
+└─────────┬─────────────────┘
+          │ schema validation fails
+          ▼
+┌──────────────────────────┐   fails again   ┌────────────────────────┐
+│  Repair call               ├────────────────▶│  Fixture response, or   │
+│  (raw output + errors)     │                 │  502 with the errors    │
+└─────────┬───────────────── ┘                 └────────────────────────┘
+          │ passes
+          ▼
+┌──────────────────────────────────────────────────────────┐
+│  Span verification (app/verify.py, deterministic, no LLM) │
+│  - exact match in passage           -> verified            │
+│  - quote found exactly once else    -> repaired (offsets   │
+│                                         rewritten)          │
+│  - anything else                    -> dropped (span       │
+│      nulled, node emphasis demoted, edge marked inferred,  │
+│      glossary term removed)                                │
+└─────────┬──────────────────────────────────────────────────┘
+          ▼
+┌──────────────────────────┐
+│  ExplainResponse           │  cached, logged to logs/runs.jsonl
+└──────────────────────────┘
 ```
+
+If `GROQ_API_KEY` is unset, the Groq call fails twice, or it times out after
+30s, the backend serves a pre-baked fixture instead (`meta.model =
+"fixture"`) rather than erroring — the test page and all sample passages work
+with zero network access.
 
 ## Module boundaries
 
-| Module | Path | Responsibility | Depends on |
-|---|---|---|---|
-| Tracking daemon | `desktop-app/src/main/tracking/` | Polls OS for active window/idle/SSID, writes raw events | `db/rawEventsRepo` |
-| Local ingest server | `desktop-app/src/main/server/` | Accepts browser-extension POSTs, validates, writes raw events | `db/rawEventsRepo` |
-| Data layer | `desktop-app/src/main/db/` | Schema, migrations-on-boot, typed repos (raw events, category rules, SSID labels, goals) | `better-sqlite3` only |
-| Aggregation logic | `desktop-app/src/main/aggregation/` | Turns raw events into category/location trends, week-over-week deltas, goal progress | `db/*Repo` (read-only) |
-| IPC layer | `desktop-app/src/main/ipcHandlers.ts`, `preload/` | The only bridge between main-process data/logic and the renderer | `aggregation/`, `db/` |
-| UI | `desktop-app/src/renderer/` | Trends (three hero categories + full breakdown + drilldown) and Settings screens, chart rendering | `window.timeaware.*` only, via `hooks.ts` |
-| Browser extension | `browser-extension/` | Tracks focused-tab domain time, POSTs to the local ingest server | Nothing in `desktop-app/` — communicates only over HTTP |
+| Module | Path | Responsibility |
+|---|---|---|
+| API | `reading-backend/app/main.py` | Routes: `/v1/explain`, `/v1/explain/{id}`, `/v1/explain/{id}/relayout`, `/v1/samples`, `/healthz` |
+| Pipeline | `reading-backend/app/pipeline.py` | Orchestrates cache → LLM → repair → verify |
+| LLM client | `reading-backend/app/llm.py`, `prompts.py` | Groq call, few-shot prompt, JSON-mode parsing |
+| Span verification | `reading-backend/app/verify.py` | Deterministic exact/repaired/dropped classification against the literal passage |
+| Cache | `reading-backend/app/cache.py` | SQLite (`cache.db`), keyed by passage+mode+schema+model hash |
+| Schema | `reading-backend/app/schema.py` | Pydantic models for `ExplainRequest`/`ExplainResponse` |
+| Floating icon + picker | `reading-extension/src/content.ts` | Runs in the page's own origin; selection UI |
+| Backend client | `reading-extension/src/background.ts` | Service worker; the only piece that calls the backend (content scripts would be blocked by CORS calling it directly — the extension's `host_permissions` cover this instead) |
+| On-device library | `reading-extension/src/storage.ts` | `chrome.storage.local`, most-recent 60 results |
+| Diagram renderer | `reading-extension/src/render.ts` | Draws all five forms (spectrum, comparison, concept map, process, axis) from `ExplainResponse` fields only |
 
-Each module only talks to the next one through the interfaces above — the tracking daemon
-and ingest server never know about categorization or goals; the aggregation layer never
-knows how an event was captured; the renderer never touches SQLite or the filesystem
-directly, only `window.timeaware.*`.
+Each module only talks to the next one through the interfaces above — the
+extension never touches the LLM or the cache directly, only `POST
+/v1/explain`; the pipeline never knows whether the caller is a browser
+extension, the test page, or `scripts/try_explain.py`.
 
-## Why raw events and aggregation are kept separate
+## Non-goals
 
-`raw_events` is append-only and never rewritten. All trend/goal/category math in
-`aggregation/trends.ts` is plain SQL run against that table (or small config tables like
-`category_rules`), not a materialized rollup. That means adding a new data source (e.g. a
-mobile app, a second browser's extension) or a new metric only requires a new query or a
-new `source` value — never a migration of historical data, and never a change to how
-existing data was already summarized.
-
-## Double-counting avoidance (desktop app-level vs. extension domain-level)
-
-When a recognized browser (Chrome/Edge/Brave/Safari/Firefox/Arc) is the focused app, the
-desktop daemon still records it as e.g. `app_name = "Google Chrome"`. If the browser
-extension is installed and also reported a domain for that same one-minute window, the
-aggregation layer (`getAppMsByDate` in `trends.ts`) excludes that desktop-level row from
-category totals — the more specific domain-level row (with its own category, e.g.
-`github.com` → "Productivity") is used instead. If the extension isn't installed, or the tab
-was idle, the generic app-level "Chrome" time is used, uncategorized by default. This is
-why the extension is optional: the app degrades gracefully to app-level-only tracking
-without it.
-
-## The "Outside" pseudo-category
-
-`getGoalProgress` and `getWeekOverWeekDelta` in `aggregation/trends.ts` both special-case
-one reserved category name, `OUTSIDE_PSEUDO_CATEGORY` (`shared/constants.ts`): instead of
-resolving it from `category_rules` like every other category, they pull from
-`getOutsideTrend`, which sums location hours for every SSID label except
-`HOME_LOCATION_LABEL` ("Home", case-insensitive). This lets goals work identically for
-it (`goals.category = 'Outside'` is just a row like any other) while its actual data comes
-from an entirely different table. It's the one place category-based and location-based
-data intentionally overlap in the same API surface.
-
-## Future extension points
-
-These were explicitly scoped out of v1 (see README "Future extension points" for the
-full, user-facing list): cloud sync/multi-device, mobile tracking, browsers without a
-Chromium-based Manifest V3 engine (e.g. legacy Firefox WebExtensions differences), and a
-persistent retry queue for extension events sent while the desktop app is closed.
+No PDF parsing, no auth, no real frontend styling beyond the extension's own
+mockup-matched CSS, no streaming, no whole-paper analysis, no other LLM
+providers, no deployment tooling beyond what's needed to point the extension
+at a hosted backend URL. All scoped out deliberately, not by oversight.
